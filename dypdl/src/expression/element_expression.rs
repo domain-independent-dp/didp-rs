@@ -1,6 +1,8 @@
 use super::condition::{Condition, IfThenElse};
+use super::local_environment::LocalEnvironment;
 use super::numeric_operator::{BinaryOperator, MaxMin};
 use super::table_expression::TableExpression;
+use crate::local_variable::LocalVariable;
 use crate::state::{ElementResourceVariable, ElementVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
@@ -33,6 +35,7 @@ pub enum ElementExpression {
         Box<ElementExpression>,
         Box<ElementExpression>,
     ),
+    LocalVariable(usize),
 }
 
 impl Default for ElementExpression {
@@ -61,6 +64,13 @@ impl From<ElementResourceVariable> for ElementExpression {
     #[inline]
     fn from(v: ElementResourceVariable) -> ElementExpression {
         ElementExpression::ResourceVariable(v.id())
+    }
+}
+
+impl From<LocalVariable> for ElementExpression {
+    #[inline]
+    fn from(v: LocalVariable) -> ElementExpression {
+        ElementExpression::LocalVariable(v.id())
     }
 }
 
@@ -510,24 +520,33 @@ macro_rules! impl_binary_ops {
 impl_binary_ops!(ElementExpression, Element);
 impl_binary_ops!(ElementExpression, ElementVariable);
 impl_binary_ops!(ElementExpression, ElementResourceVariable);
+impl_binary_ops!(ElementExpression, LocalVariable);
 impl_binary_ops!(Element, ElementExpression);
 impl_binary_ops!(Element, ElementVariable);
 impl_binary_ops!(Element, ElementResourceVariable);
+impl_binary_ops!(Element, LocalVariable);
 impl_binary_ops!(ElementVariable, ElementExpression);
 impl_binary_ops!(ElementVariable, Element);
 impl_binary_ops!(ElementVariable, ElementVariable);
 impl_binary_ops!(ElementVariable, ElementResourceVariable);
+impl_binary_ops!(ElementVariable, LocalVariable);
 impl_binary_ops!(ElementResourceVariable, ElementExpression);
 impl_binary_ops!(ElementResourceVariable, Element);
 impl_binary_ops!(ElementResourceVariable, ElementVariable);
 impl_binary_ops!(ElementResourceVariable, ElementResourceVariable);
+impl_binary_ops!(ElementResourceVariable, LocalVariable);
+impl_binary_ops!(LocalVariable, ElementExpression);
+impl_binary_ops!(LocalVariable, Element);
+impl_binary_ops!(LocalVariable, ElementVariable);
+impl_binary_ops!(LocalVariable, ElementResourceVariable);
+impl_binary_ops!(LocalVariable, LocalVariable);
 
 impl ElementExpression {
     /// Returns the evaluation result.
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -548,6 +567,7 @@ impl ElementExpression {
     ///     1,
     /// );
     /// ```
+    #[inline]
     pub fn eval<T: StateInterface>(
         &self,
         state: &T,
@@ -555,31 +575,86 @@ impl ElementExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Element {
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    pub fn eval_with_local_environment<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Element {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_element_variable(*i),
             Self::ResourceVariable(i) => state.get_element_resource_variable(*i),
-            Self::StateFunction(i) => {
-                function_cache.get_element_value(*i, state, state_functions, registry)
-            }
+            Self::StateFunction(i) => function_cache.get_element_value(
+                *i,
+                state,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::BinaryOperation(op, x, y) => op.eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table(table) => *table.eval(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
                 &registry.element_tables,
             ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, function_cache, state_functions, registry) {
-                    x.eval(state, function_cache, state_functions, registry)
+                if condition.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) {
+                    x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 } else {
-                    y.eval(state, function_cache, state_functions, registry)
+                    y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 }
             }
+            Self::LocalVariable(id) => local_environment.get(*id).unwrap(),
         }
     }
 
@@ -587,7 +662,7 @@ impl ElementExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> ElementExpression {
         match self {
             Self::BinaryOperation(op, x, y) => match (x.simplify(registry), y.simplify(registry)) {
@@ -728,6 +803,13 @@ mod tests {
         assert_eq!(
             ElementExpression::from(v),
             ElementExpression::ResourceVariable(v.id())
+        );
+
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let v = local_variable_data.add("x").unwrap();
+        assert_eq!(
+            ElementExpression::from(v),
+            ElementExpression::LocalVariable(v.id())
         );
     }
 
@@ -2350,6 +2432,28 @@ mod tests {
     }
 
     #[test]
+    fn element_local_variable_eval() {
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
+        let registry = generate_registry();
+        let expression = ElementExpression::LocalVariable(0);
+
+        local_environment.set(0, 2);
+        assert_eq!(
+            expression.eval_with_local_environment(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
+            2
+        );
+    }
+
+    #[test]
     fn element_state_function_eval() {
         let mut state_metadata = StateMetadata::default();
         let ob = state_metadata.add_object_type("ob", 3);
@@ -2472,6 +2576,13 @@ mod tests {
     fn element_resource_variable_simplify() {
         let registry = generate_registry();
         let expression = ElementExpression::ResourceVariable(0);
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn element_local_variable_simplify() {
+        let registry = generate_registry();
+        let expression = ElementExpression::LocalVariable(0);
         assert_eq!(expression.simplify(&registry), expression);
     }
 

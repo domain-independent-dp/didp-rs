@@ -16,7 +16,8 @@ pub use hashable_state::{
     HashableSignatureVariables, HashableState, StateWithHashableSignatureVariables,
 };
 pub use search_node::{
-    BfsNode, BfsNodeWithTransitionIds, CostNode, CustomFNode, FNode, FNodeEvaluators, WeightedFNode,
+    BfsNode, BfsNodeWithTransitionIds, CostNode, CustomFNode, FNode, FNodeEvaluators,
+    ResourceLexicographicNode, WeightedFNode,
 };
 pub use state_registry::{
     remove_dominated, InsertionResult, StateInRegistry, StateInformation, StateRegistry,

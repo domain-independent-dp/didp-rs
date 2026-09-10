@@ -1,12 +1,12 @@
 use super::argument_parser::{parse_argument, parse_multiple_arguments};
 use super::element_parser;
 use super::util;
-use super::util::ParseErr;
+use super::util::{ModelData, ParseErr};
 use dypdl::expression::{
     ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
 };
 use dypdl::variable_type::Numeric;
-use dypdl::{StateFunctions, StateMetadata, TableData, TableRegistry};
+use dypdl::TableData;
 use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
@@ -16,38 +16,30 @@ type NumericTableParsingResult<'a, T> = Option<(NumericTableExpression<T>, &'a [
 pub fn parse_expression<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
     tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
+        let (y, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table2D(*i, x, y), rest)))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
-        let (z, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
+        let (y, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
+        let (z, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_args(tokens, metadata, functions, registry, parameters)?;
+        let (args, rest) = parse_args(tokens, model_data, local_variables)?;
         Ok(Some((NumericTableExpression::Table(*i, args), rest)))
     } else {
         let op = match name {
@@ -60,21 +52,14 @@ where
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        let model_data = ModelData {
-            metadata,
-            functions,
-            registry,
-        };
-        parse_reduce(name, rest, op, model_data, parameters, tables)
+        parse_reduce(name, rest, op, model_data, local_variables, tables)
     }
 }
 
 fn parse_args<'a>(
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ElementExpression>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -86,32 +71,22 @@ fn parse_args<'a>(
             return Ok((args, rest));
         }
         let (expression, new_xs) =
-            element_parser::parse_expression(xs, metadata, functions, registry, parameters)?;
+            element_parser::parse_expression(xs, model_data, local_variables)?;
         args.push(expression);
         xs = new_xs;
     }
-}
-
-struct ModelData<'a> {
-    metadata: &'a StateMetadata,
-    functions: &'a StateFunctions,
-    registry: &'a TableRegistry,
 }
 
 fn parse_reduce<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     op: ReduceOperator,
-    model_data: ModelData,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
     tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
-    let metadata = model_data.metadata;
-    let functions = model_data.functions;
-    let registry = model_data.registry;
-
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         match x {
             ArgumentExpression::Set(x) => Ok(Some((
@@ -123,8 +98,8 @@ fn parse_reduce<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
+        let (y, rest) = parse_argument(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok(Some((
@@ -144,17 +119,16 @@ fn parse_reduce<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
-        let (z, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
+        let (y, rest) = parse_argument(rest, model_data, local_variables)?;
+        let (z, rest) = parse_argument(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
             NumericTableExpression::Table3DReduce(op, *i, x, y, z),
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) =
-            parse_multiple_arguments(tokens, metadata, functions, registry, parameters)?;
+        let (args, rest) = parse_multiple_arguments(tokens, model_data, local_variables)?;
         Ok(Some((
             NumericTableExpression::TableReduce(op, *i, args),
             rest,
@@ -286,10 +260,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -311,10 +289,14 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -339,10 +321,14 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -354,10 +340,14 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -376,10 +366,14 @@ mod tests {
         let result = parse_expression(
             name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -431,10 +425,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -446,10 +444,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -461,10 +463,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -484,10 +490,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -499,10 +509,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -514,10 +528,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -537,10 +555,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -552,10 +574,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -567,10 +593,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -590,10 +620,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -605,10 +639,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -620,10 +658,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -643,10 +685,14 @@ mod tests {
         let result = parse_expression(
             "f2",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -678,10 +724,14 @@ mod tests {
         let result = parse_expression(
             "f2",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -700,10 +750,14 @@ mod tests {
         let result = parse_expression(
             name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -728,10 +782,14 @@ mod tests {
         let result = parse_expression(
             name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -756,10 +814,14 @@ mod tests {
         let result = parse_expression(
             name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -812,10 +874,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -827,10 +893,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -842,10 +912,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -865,10 +939,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -880,10 +958,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -895,10 +977,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -918,10 +1004,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -933,10 +1023,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -948,10 +1042,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -971,10 +1069,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -986,10 +1088,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1001,10 +1107,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1024,10 +1134,14 @@ mod tests {
         let result = parse_expression(
             "f3",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1060,10 +1174,14 @@ mod tests {
         let result = parse_expression(
             "f3",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1083,10 +1201,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1120,10 +1242,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1143,10 +1269,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1180,10 +1310,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1203,10 +1337,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1240,10 +1378,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1263,10 +1405,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1300,10 +1446,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1323,10 +1473,14 @@ mod tests {
         let result = parse_expression(
             "f4",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1361,10 +1515,14 @@ mod tests {
         let result = parse_expression(
             "f4",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1383,10 +1541,14 @@ mod tests {
         let result = parse_expression(
             name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1445,10 +1607,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1460,10 +1626,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1483,10 +1653,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1498,10 +1672,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1521,10 +1699,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1536,10 +1718,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1559,10 +1745,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1574,10 +1764,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());

@@ -1,7 +1,6 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, StateInRegistry, StateRegistry,
-    TransitionMutex, TransitionWithId,
+    exceed_bound, BfsNode, StateInRegistry, StateRegistry, TransitionMutex, TransitionWithId,
 };
 use super::neighborhood_search::NeighborhoodSearchInput;
 use super::randomized_restricted_dd::{randomized_restricted_dd, RandomizedRestrictedDDParameters};

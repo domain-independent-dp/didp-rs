@@ -118,12 +118,11 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &CostNode<_>,
-                                         transition,
-                                         cache: &mut ParentAndChildStateFunctionCache,
-                                         _| {
-            node.generate_successor_node(transition, cache, &model)
-        };
+        let transition_evaluator =
+            move |node: &CostNode<_>,
+                  transition,
+                  cache: &mut ParentAndChildStateFunctionCache,
+                  _| { node.generate_successor_node(transition, cache, &model) };
         let beam_search = move |input: &SearchInput<_, _>, parameters| {
             beam_search(
                 input,

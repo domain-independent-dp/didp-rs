@@ -1,7 +1,9 @@
+use super::algorithms;
 use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::element_expression::ElementExpression;
 use super::integer_expression::IntegerExpression;
+use super::local_environment::LocalEnvironment;
 use super::numeric_operator::{
     BinaryOperator, CastOperator, ContinuousBinaryOperation, ContinuousBinaryOperator,
     ContinuousUnaryOperator, MaxMin, ReduceOperator, UnaryOperator,
@@ -9,14 +11,18 @@ use super::numeric_operator::{
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
+use super::substitute_local_variable::SubstituteLocalVariable;
+use crate::local_variable::LocalVariable;
 use crate::state::{
     ContinuousResourceVariable, ContinuousVariable, IntegerResourceVariable, IntegerVariable,
-    SetVariable, StateInterface,
+    SetResourceVariable, SetVariable, StateInterface,
 };
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
+use crate::ModelErr;
+use ordered_float::OrderedFloat;
 use std::boxed::Box;
 use std::ops;
 
@@ -55,6 +61,24 @@ pub enum ContinuousExpression {
     Cardinality(SetExpression),
     /// A constant in a continuous table.
     Table(Box<NumericTableExpression<Continuous>>),
+    /// The minimum spanning tree cost over a set expression using a 2D continuous table as edge costs.
+    MinimumSpanningTree(Box<SetExpression>, usize),
+    /// The minimum spanning tree cost over a set expression using a 2D continuous table as edge costs and a 2D boolean table as edge connectivity.
+    MinimumSpanningTreeWithConnectivity(Box<SetExpression>, usize, usize),
+    /// The minimum spanning tree cost over a set expression using an explicit list of edges,
+    /// each given as a node pair and a cost expression.
+    MinimumSpanningTreeWithEdges(
+        Box<SetExpression>,
+        Vec<(usize, usize, ContinuousExpression)>,
+    ),
+    /// The minimum spanning tree cost over a set expression using an explicit list of edges,
+    /// each given as a node pair, a cost expression, and a condition for the edge to be present.
+    MinimumSpanningTreeWithEdgesAndConnectivity(
+        Box<SetExpression>,
+        Vec<(usize, usize, ContinuousExpression, Condition)>,
+    ),
+    /// The minimum spanning tree cost over a set expression using pre-sorted edge costs.
+    MinimumSpanningTreeWithSortedEdges(Box<SetExpression>, Vec<(usize, usize, Continuous)>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
     If(
         Box<Condition>,
@@ -63,6 +87,78 @@ pub enum ContinuousExpression {
     ),
     /// Conversion from an integer expression.
     FromInteger(Box<IntegerExpression>),
+    /// Reduce operation over a set expression.
+    Reduce(
+        ReduceOperator,
+        Box<SetExpression>,
+        usize,
+        Box<ContinuousExpression>,
+    ),
+    /// Reduce operation over a set expression filtered with a condition.
+    #[doc(hidden)]
+    FilterReduce(
+        ReduceOperator,
+        Box<SetExpression>,
+        usize,
+        usize,
+        Box<Condition>,
+        Box<ContinuousExpression>,
+    ),
+    FractionalKnapsackSorted(
+        Box<SetExpression>,
+        Box<ContinuousExpression>,
+        Vec<(usize, Continuous, Continuous)>,
+    ),
+    FractionalKnapsack(
+        Box<SetExpression>,
+        Box<ContinuousExpression>,
+        Vec<(usize, ContinuousExpression, ContinuousExpression)>,
+    ),
+    FractionalKnapsackIntegerTable(Box<SetExpression>, Box<ContinuousExpression>, usize, usize),
+    FractionalKnapsackContinuousTable(Box<SetExpression>, Box<ContinuousExpression>, usize, usize),
+    FractionalKnapsackIntegerValueContinuousWeightTable(
+        Box<SetExpression>,
+        Box<ContinuousExpression>,
+        usize,
+        usize,
+    ),
+    FractionalKnapsackContinuousValueIntegerWeightTable(
+        Box<SetExpression>,
+        Box<ContinuousExpression>,
+        usize,
+        usize,
+    ),
+}
+
+fn simplify_fractional_knapsack_sorted(
+    set: SetExpression,
+    capacity: ContinuousExpression,
+    sorted_items: Vec<(usize, Continuous, Continuous)>,
+) -> ContinuousExpression {
+    match (&set, &capacity) {
+        (
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+            ContinuousExpression::Constant(capacity),
+        ) => {
+            let sorted_items = sorted_items.iter().filter_map(|&(i, value, weight)| {
+                if set.contains(i) {
+                    Some((value, weight))
+                } else {
+                    None
+                }
+            });
+
+            ContinuousExpression::Constant(algorithms::compute_fractional_knapsack_sorted(
+                *capacity,
+                sorted_items,
+            ))
+        }
+        _ => ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(set),
+            Box::new(capacity),
+            sorted_items,
+        ),
+    }
 }
 
 impl Default for ContinuousExpression {
@@ -277,6 +373,145 @@ impl ContinuousExpression {
     #[inline]
     pub fn trunc(self) -> ContinuousExpression {
         Self::Round(CastOperator::Trunc, Box::new(self))
+    }
+
+    /// Return an expression representing the Dantzig's bound on the knapsack problem.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2]).unwrap();
+    /// let var = model.add_integer_variable("capacity", 0).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let capacity = 5.0;
+    /// let values = vec![var + 2.0, var + 3.0, var + 5.0, var + 10.0];
+    /// let weights = vec![var + 1.0, var + 2.0, var + 4.0, var + 1.0];
+    /// let expression = ContinuousExpression::fractional_knapsack(
+    ///     set, capacity, values, weights
+    /// ).unwrap();
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     7.5,
+    /// );
+    /// ```
+    pub fn fractional_knapsack<S, C>(
+        set: S,
+        capacity: C,
+        values: Vec<ContinuousExpression>,
+        weights: Vec<ContinuousExpression>,
+    ) -> Result<ContinuousExpression, ModelErr>
+    where
+        SetExpression: From<S>,
+        ContinuousExpression: From<C>,
+    {
+        if values.len() != weights.len() {
+            return Err(ModelErr::new(
+                "Values and weights must have the same length".to_string(),
+            ));
+        }
+
+        let items = values
+            .into_iter()
+            .zip(weights)
+            .enumerate()
+            .map(|(i, (v, w))| (i, v, w))
+            .collect::<Vec<_>>();
+
+        Ok(ContinuousExpression::FractionalKnapsack(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            items,
+        ))
+    }
+
+    /// Return an expression representing Dantzig's bound using 1D integer tables.
+    #[inline]
+    pub fn fractional_knapsack_with_integer_tables<S, C>(
+        set: S,
+        capacity: C,
+        values: Table1DHandle<Integer>,
+        weights: Table1DHandle<Integer>,
+    ) -> ContinuousExpression
+    where
+        SetExpression: From<S>,
+        ContinuousExpression: From<C>,
+    {
+        ContinuousExpression::FractionalKnapsackIntegerTable(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            values.id(),
+            weights.id(),
+        )
+    }
+
+    /// Return an expression representing Dantzig's bound using 1D continuous tables.
+    #[inline]
+    pub fn fractional_knapsack_with_continuous_tables<S, C>(
+        set: S,
+        capacity: C,
+        values: Table1DHandle<Continuous>,
+        weights: Table1DHandle<Continuous>,
+    ) -> ContinuousExpression
+    where
+        SetExpression: From<S>,
+        ContinuousExpression: From<C>,
+    {
+        ContinuousExpression::FractionalKnapsackContinuousTable(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            values.id(),
+            weights.id(),
+        )
+    }
+
+    /// Return an expression representing Dantzig's bound using integer values and continuous weights.
+    #[inline]
+    pub fn fractional_knapsack_with_integer_value_and_continuous_weight_tables<S, C>(
+        set: S,
+        capacity: C,
+        values: Table1DHandle<Integer>,
+        weights: Table1DHandle<Continuous>,
+    ) -> ContinuousExpression
+    where
+        SetExpression: From<S>,
+        ContinuousExpression: From<C>,
+    {
+        ContinuousExpression::FractionalKnapsackIntegerValueContinuousWeightTable(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            values.id(),
+            weights.id(),
+        )
+    }
+
+    /// Return an expression representing Dantzig's bound using continuous values and integer weights.
+    #[inline]
+    pub fn fractional_knapsack_with_continuous_value_and_integer_weight_tables<S, C>(
+        set: S,
+        capacity: C,
+        values: Table1DHandle<Continuous>,
+        weights: Table1DHandle<Integer>,
+    ) -> ContinuousExpression
+    where
+        SetExpression: From<S>,
+        ContinuousExpression: From<C>,
+    {
+        ContinuousExpression::FractionalKnapsackContinuousValueIntegerWeightTable(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            values.id(),
+            weights.id(),
+        )
     }
 }
 
@@ -618,6 +853,146 @@ impl SetExpression {
     pub fn len_continuous(self) -> ContinuousExpression {
         ContinuousExpression::Cardinality(self)
     }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.sum_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        ContinuousExpression::Reduce(ReduceOperator::Sum, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.product_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product_continuous(
+        self,
+        x: LocalVariable,
+        f: ContinuousExpression,
+    ) -> ContinuousExpression {
+        ContinuousExpression::Reduce(ReduceOperator::Product, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.max_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        ContinuousExpression::Reduce(ReduceOperator::Max, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.min_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        ContinuousExpression::Reduce(ReduceOperator::Min, Box::new(self), x.id(), Box::new(f))
+    }
 }
 
 impl SetVariable {
@@ -648,6 +1023,317 @@ impl SetVariable {
     #[inline]
     pub fn len_continuous(self) -> ContinuousExpression {
         ContinuousExpression::Cardinality(SetExpression::from(self))
+    }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.sum_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).sum_continuous(x, f)
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.product_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product_continuous(
+        self,
+        x: LocalVariable,
+        f: ContinuousExpression,
+    ) -> ContinuousExpression {
+        SetExpression::from(self).product_continuous(x, f)
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.max_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).max_continuous(x, f)
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.min_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).min_continuous(x, f)
+    }
+}
+
+impl SetResourceVariable {
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let variable = model.add_set_resource_variable("variable", object_type, false, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = variable.len_continuous();
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0
+    /// );
+    /// ```
+    #[inline]
+    pub fn len_continuous(self) -> ContinuousExpression {
+        ContinuousExpression::Cardinality(SetExpression::from(self))
+    }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.sum_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).sum_continuous(x, f)
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.product_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product_continuous(
+        self,
+        x: LocalVariable,
+        f: ContinuousExpression,
+    ) -> ContinuousExpression {
+        SetExpression::from(self).product_continuous(x, f)
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.max_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).max_continuous(x, f)
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2.0, 3.0]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.min_continuous(
+    ///     x,
+    ///     Table1DHandle::<Continuous>::element(&table, x) * Table1DHandle::<Continuous>::element(&table, x),
+    /// );
+    ///
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4.0,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min_continuous(self, x: LocalVariable, f: ContinuousExpression) -> ContinuousExpression {
+        SetExpression::from(self).min_continuous(x, f)
     }
 }
 
@@ -864,6 +1550,17 @@ impl Table2DHandle<Continuous> {
             ElementExpression::from(x),
             ElementExpression::from(y),
         )))
+    }
+
+    /// Returns the cost of the minimum spanning tree over a set expression.
+    ///
+    /// The 2D table is interpreted as the complete graph edge-cost matrix.
+    #[inline]
+    pub fn minimum_spanning_tree<T>(&self, nodes: T) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+    {
+        ContinuousExpression::MinimumSpanningTree(Box::new(SetExpression::from(nodes)), self.id())
     }
 
     /// Returns the sum of constants over a set expression in a 2D continuous table.
@@ -2023,7 +2720,9 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used, a min/max reduce operation is
+    /// performed on an empty set, or a minimum spanning tree expression is evaluated on a
+    /// disconnected graph.
     ///
     /// # Examples
     ///
@@ -2052,14 +2751,42 @@ impl ContinuousExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Continuous {
-        self.eval_inner(None, state, function_cache, state_functions, registry)
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    #[inline]
+    pub fn eval_with_local_environment<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Continuous {
+        self.eval_inner(
+            None,
+            state,
+            function_cache,
+            local_environment,
+            state_functions,
+            registry,
+        )
     }
 
     /// Returns the evaluation result of a cost expression.
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set, or a minimum spanning
+    /// tree expression is evaluated on a disconnected graph.
     ///
     /// # Examples
     ///
@@ -2092,7 +2819,36 @@ impl ContinuousExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Continuous {
-        self.eval_inner(Some(cost), state, function_cache, state_functions, registry)
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_cost_with_local_environment(
+            cost,
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    #[inline]
+    pub fn eval_cost_with_local_environment<U: StateInterface>(
+        &self,
+        cost: Continuous,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Continuous {
+        self.eval_inner(
+            Some(cost),
+            state,
+            function_cache,
+            local_environment,
+            state_functions,
+            registry,
+        )
     }
 
     fn eval_inner<U: StateInterface>(
@@ -2100,6 +2856,7 @@ impl ContinuousExpression {
         cost: Option<Continuous>,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Continuous {
@@ -2107,65 +2864,687 @@ impl ContinuousExpression {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_continuous_variable(*i),
             Self::ResourceVariable(i) => state.get_continuous_resource_variable(*i),
-            Self::StateFunction(i) => {
-                function_cache.get_continuous_value(*i, state, state_functions, registry)
-            }
+            Self::StateFunction(i) => function_cache.get_continuous_value(
+                *i,
+                state,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::Cost => cost.unwrap(),
-            Self::UnaryOperation(op, x) => {
-                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
-            }
-            Self::ContinuousUnaryOperation(op, x) => {
-                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
-            }
-            Self::Round(op, x) => {
-                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
-            }
+            Self::UnaryOperation(op, x) => op.eval(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
+            Self::ContinuousUnaryOperation(op, x) => op.eval(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
+            Self::Round(op, x) => op.eval(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
             Self::BinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
-                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
+                let a = a.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let b = b.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 op.eval(a, b)
             }
             Self::ContinuousBinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
-                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
+                let a = a.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let b = b.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
-                let set = expression.eval(state, function_cache, state_functions, registry);
+                let set = expression.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) as Continuous
             }
             Self::Cardinality(SetExpression::StateFunction(i)) => {
-                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                let set = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) as Continuous
             }
             Self::Cardinality(set) => set
-                .eval(state, function_cache, state_functions, registry)
+                .eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
                 .count_ones(..) as Continuous,
             Self::Table(t) => t.eval(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
                 &registry.continuous_tables,
             ),
+            Self::MinimumSpanningTree(set, table) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let table = &registry.continuous_tables.tables_2d[*table];
+
+                algorithms::compute_minimum_spanning_tree_with_connectivity(
+                    set,
+                    |i, j| table.eval(i, j),
+                    |_, _| true,
+                    OrderedFloat,
+                )
+            }
+            Self::MinimumSpanningTreeWithConnectivity(set, table, connectivity_table) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let table = &registry.continuous_tables.tables_2d[*table];
+                let connectivity_table = &registry.bool_tables.tables_2d[*connectivity_table];
+
+                algorithms::compute_minimum_spanning_tree_with_connectivity(
+                    set,
+                    |i, j| table.eval(i, j),
+                    |i, j| connectivity_table.eval(i, j),
+                    OrderedFloat,
+                )
+            }
+            Self::MinimumSpanningTreeWithEdges(set, edges) => {
+                let set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let edges = edges.iter().map(|(i, j, weight)| {
+                    (
+                        *i,
+                        *j,
+                        weight.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        ),
+                    )
+                });
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    &set,
+                    algorithms::sort_minimum_spanning_tree_edges(edges, OrderedFloat),
+                )
+            }
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(set, edges) => {
+                let set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let edges = edges.iter().filter_map(|(i, j, weight, condition)| {
+                    condition
+                        .eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                        .then(|| {
+                            (
+                                *i,
+                                *j,
+                                weight.eval_inner(
+                                    cost,
+                                    state,
+                                    function_cache,
+                                    local_environment,
+                                    state_functions,
+                                    registry,
+                                ),
+                            )
+                        })
+                });
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    &set,
+                    algorithms::sort_minimum_spanning_tree_edges(edges, OrderedFloat),
+                )
+            }
+            Self::MinimumSpanningTreeWithSortedEdges(set, sorted_edges) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    set,
+                    sorted_edges.iter().copied(),
+                )
+            }
             Self::If(condition, x, y) => {
-                if condition.eval(state, function_cache, state_functions, registry) {
-                    x.eval_inner(cost, state, function_cache, state_functions, registry)
+                if condition.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) {
+                    x.eval_inner(
+                        cost,
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 } else {
-                    y.eval_inner(cost, state, function_cache, state_functions, registry)
+                    y.eval_inner(
+                        cost,
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 }
             }
             Self::FromInteger(x) => Continuous::from(if let Some(cost) = cost {
-                x.eval_cost(
+                x.eval_cost_with_local_environment(
                     cost as Integer,
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 )
             } else {
-                x.eval(state, function_cache, state_functions, registry)
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
             }),
+            Self::Reduce(op, set, id, expression) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let before = local_environment.get(*id);
+                let result = op
+                    .eval_iter(set.ones().map(|e| {
+                        local_environment.set(*id, e);
+
+                        expression.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                    }))
+                    .expect("`max`/`min` reduce performed on an empty set");
+
+                if let Some(before) = before {
+                    local_environment.set(*id, before);
+                } else {
+                    local_environment.unset(*id);
+                }
+
+                result
+            }
+            Self::FilterReduce(op, set, filter_id, id, condition, expression) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let filter_before = local_environment.get(*filter_id);
+                let reduce_before = local_environment.get(*id);
+                let result = op
+                    .eval_iter(set.ones().filter_map(|e| {
+                        local_environment.set(*filter_id, e);
+                        let passes = condition.eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        );
+                        if let Some(before) = filter_before {
+                            local_environment.set(*filter_id, before);
+                        } else {
+                            local_environment.unset(*filter_id);
+                        }
+
+                        passes.then(|| {
+                            local_environment.set(*id, e);
+                            let result = expression.eval_inner(
+                                cost,
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            );
+                            if let Some(before) = reduce_before {
+                                local_environment.set(*id, before);
+                            } else {
+                                local_environment.unset(*id);
+                            }
+                            result
+                        })
+                    }))
+                    .expect("`max`/`min` reduce performed on an empty filtered set");
+
+                result
+            }
+            Self::FractionalKnapsackSorted(set, capacity, sorted_items) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+
+                let sorted_items = sorted_items.iter().filter_map(|&(i, value, weight)| {
+                    if set.contains(i) {
+                        Some((value, weight))
+                    } else {
+                        None
+                    }
+                });
+
+                algorithms::compute_fractional_knapsack_sorted(capacity, sorted_items)
+            }
+            Self::FractionalKnapsack(set, capacity, items) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+
+                let items = items.iter().filter_map(|(i, value, weight)| {
+                    if set.contains(*i) {
+                        let value = value.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        );
+                        let weight = weight.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        );
+
+                        Some((value, weight))
+                    } else {
+                        None
+                    }
+                });
+
+                algorithms::compute_fractional_knapsack(capacity, items)
+            }
+            Self::FractionalKnapsackIntegerTable(set, capacity, values, weights) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let values = &registry.integer_tables.tables_1d[*values];
+                let weights = &registry.integer_tables.tables_1d[*weights];
+                let items = set
+                    .ones()
+                    .map(|i| (values.eval(i) as Continuous, weights.eval(i) as Continuous));
+
+                algorithms::compute_fractional_knapsack(capacity, items)
+            }
+            Self::FractionalKnapsackContinuousTable(set, capacity, values, weights) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let values = &registry.continuous_tables.tables_1d[*values];
+                let weights = &registry.continuous_tables.tables_1d[*weights];
+                let items = set.ones().map(|i| (values.eval(i), weights.eval(i)));
+
+                algorithms::compute_fractional_knapsack(capacity, items)
+            }
+            Self::FractionalKnapsackIntegerValueContinuousWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let values = &registry.integer_tables.tables_1d[*values];
+                let weights = &registry.continuous_tables.tables_1d[*weights];
+                let items = set
+                    .ones()
+                    .map(|i| (values.eval(i) as Continuous, weights.eval(i)));
+
+                algorithms::compute_fractional_knapsack(capacity, items)
+            }
+            Self::FractionalKnapsackContinuousValueIntegerWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                let capacity = capacity.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let values = &registry.continuous_tables.tables_1d[*values];
+                let weights = &registry.integer_tables.tables_1d[*weights];
+                let items = set
+                    .ones()
+                    .map(|i| (values.eval(i), weights.eval(i) as Continuous));
+
+                algorithms::compute_fractional_knapsack(capacity, items)
+            }
         }
     }
 
@@ -2173,7 +3552,8 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set, or a constant minimum
+    /// spanning tree expression contains a disconnected graph.
     pub fn simplify(&self, registry: &TableRegistry) -> ContinuousExpression {
         match self {
             Self::UnaryOperation(op, x) => match x.simplify(registry) {
@@ -2210,6 +3590,149 @@ impl ContinuousExpression {
                     expression => Self::Table(Box::new(expression)),
                 }
             }
+            Self::MinimumSpanningTree(set, table) => {
+                let set = set.simplify(registry);
+                let table =
+                    registry.continuous_tables.tables_2d.get(*table).expect(
+                        "minimum spanning tree edge-weight table is not in the table registry",
+                    );
+                let sorted_edges = algorithms::sort_minimum_spanning_tree_edges_with_connectivity(
+                    &table.0,
+                    |_, _| true,
+                    OrderedFloat,
+                );
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges,
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges)
+            }
+            Self::MinimumSpanningTreeWithConnectivity(set, table, connectivity_table) => {
+                let set = set.simplify(registry);
+                let table =
+                    registry.continuous_tables.tables_2d.get(*table).expect(
+                        "minimum spanning tree edge-weight table is not in the table registry",
+                    );
+                let connectivity_table = registry
+                    .bool_tables
+                    .tables_2d
+                    .get(*connectivity_table)
+                    .expect(
+                        "minimum spanning tree connectivity table is not in the table registry",
+                    );
+                let sorted_edges = algorithms::sort_minimum_spanning_tree_edges_with_connectivity(
+                    &table.0,
+                    |i, j| connectivity_table.0[i][j],
+                    OrderedFloat,
+                );
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges,
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges)
+            }
+            Self::MinimumSpanningTreeWithEdges(set, edges) => {
+                let set = set.simplify(registry);
+                let edges = edges
+                    .iter()
+                    .map(|(i, j, weight)| (*i, *j, weight.simplify(registry)))
+                    .collect::<Vec<_>>();
+                let constant_edges = edges
+                    .iter()
+                    .map(|(i, j, weight)| match weight {
+                        Self::Constant(value) => Some((*i, *j, *value)),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(constant_edges) = constant_edges {
+                    let sorted_edges =
+                        algorithms::sort_minimum_spanning_tree_edges(constant_edges, OrderedFloat);
+
+                    if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                        return Self::Constant(
+                            algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                                set,
+                                sorted_edges,
+                            ),
+                        );
+                    }
+
+                    return Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges);
+                }
+
+                Self::MinimumSpanningTreeWithEdges(Box::new(set), edges)
+            }
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(set, edges) => {
+                let set = set.simplify(registry);
+                let edges = edges
+                    .iter()
+                    .map(|(i, j, weight, condition)| {
+                        (
+                            *i,
+                            *j,
+                            weight.simplify(registry),
+                            condition.simplify(registry),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let constant_edges = edges
+                    .iter()
+                    .map(|(i, j, weight, condition)| match (weight, condition) {
+                        (_, Condition::Constant(false)) => Some(None),
+                        (Self::Constant(value), Condition::Constant(true)) => {
+                            Some(Some((*i, *j, *value)))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(edges) = constant_edges {
+                    let sorted_edges = algorithms::sort_minimum_spanning_tree_edges(
+                        edges.into_iter().flatten(),
+                        OrderedFloat,
+                    );
+
+                    if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                        return Self::Constant(
+                            algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                                set,
+                                sorted_edges,
+                            ),
+                        );
+                    }
+
+                    return Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges);
+                }
+
+                Self::MinimumSpanningTreeWithEdgesAndConnectivity(Box::new(set), edges)
+            }
+            Self::MinimumSpanningTreeWithSortedEdges(set, sorted_edges) => {
+                let set = set.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges.iter().copied(),
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges.clone())
+            }
             Self::If(condition, x, y) => match condition.simplify(registry) {
                 Condition::Constant(true) => x.simplify(registry),
                 Condition::Constant(false) => y.simplify(registry),
@@ -2223,6 +3746,268 @@ impl ContinuousExpression {
                 IntegerExpression::Constant(x) => Self::Constant(x as Continuous),
                 x => Self::FromInteger(Box::new(x)),
             },
+            Self::Reduce(op, set, id, expression) => {
+                let set = set.simplify(registry);
+                let expression = expression.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    let values = set
+                        .ones()
+                        .map(|element| {
+                            match expression
+                                .substitute_local_variable(*id, element)
+                                .simplify(registry)
+                            {
+                                Self::Constant(value) => Some(value),
+                                _ => None,
+                            }
+                        })
+                        .collect::<Option<Vec<_>>>();
+                    if let Some(values) = values {
+                        return Self::Constant(
+                            op.eval_iter(values.into_iter())
+                                .expect("`max`/`min` reduce performed on an empty constant set"),
+                        );
+                    }
+                }
+
+                if let SetExpression::Filter(set, filter_id, condition) = set {
+                    return Self::FilterReduce(
+                        op.clone(),
+                        set,
+                        filter_id,
+                        *id,
+                        condition,
+                        Box::new(expression),
+                    );
+                }
+
+                if let Self::Table(table) = &expression {
+                    if let Some(table) = table.reduce(op, &set, *id) {
+                        return Self::Table(Box::new(table));
+                    }
+                }
+
+                Self::Reduce(op.clone(), Box::new(set), *id, Box::new(expression))
+            }
+            Self::FilterReduce(op, set, filter_id, id, condition, expression) => {
+                let set = set.simplify(registry);
+                let expression = expression.simplify(registry);
+                let condition = condition.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    let mut values = Vec::new();
+                    let mut is_constant = true;
+
+                    for element in set.ones() {
+                        let condition = condition
+                            .substitute_local_variable(*filter_id, element)
+                            .simplify(registry);
+                        match condition {
+                            Condition::Constant(true) => {
+                                match expression
+                                    .substitute_local_variable(*id, element)
+                                    .simplify(registry)
+                                {
+                                    Self::Constant(value) => values.push(value),
+                                    _ => {
+                                        is_constant = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            Condition::Constant(false) => {}
+                            _ => {
+                                is_constant = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if is_constant {
+                        return Self::Constant(
+                            op.eval_iter(values.into_iter())
+                                .expect("`max`/`min` reduce performed on an empty filtered set"),
+                        );
+                    }
+                }
+
+                match (op, &condition) {
+                    (ReduceOperator::Sum, Condition::Constant(false)) => Self::Constant(0.0),
+                    (ReduceOperator::Product, Condition::Constant(false)) => Self::Constant(1.0),
+                    _ => Self::FilterReduce(
+                        op.clone(),
+                        Box::new(set),
+                        *filter_id,
+                        *id,
+                        Box::new(condition),
+                        Box::new(expression),
+                    ),
+                }
+            }
+            Self::FractionalKnapsackSorted(set, capacity, sorted_items) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                simplify_fractional_knapsack_sorted(set, capacity, sorted_items.clone())
+            }
+            Self::FractionalKnapsack(set, capacity, items) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                let items = items
+                    .iter()
+                    .map(|(i, value, weight)| {
+                        let value = value.simplify(registry);
+                        let weight = weight.simplify(registry);
+                        (*i, value, weight)
+                    })
+                    .collect::<Vec<_>>();
+
+                let constant_items = items
+                    .iter()
+                    .map(|(i, value, weight)| match (value, weight) {
+                        (Self::Constant(value), Self::Constant(weight)) => {
+                            Some((*i, *value, *weight))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(items) = constant_items {
+                    let sorted_items =
+                        algorithms::sort_fractional_knapsack_items_with_indices(items);
+                    simplify_fractional_knapsack_sorted(set, capacity, sorted_items)
+                } else {
+                    Self::FractionalKnapsack(Box::new(set), Box::new(capacity), items)
+                }
+            }
+            Self::FractionalKnapsackIntegerTable(set, capacity, values, weights) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                let value_table = registry
+                    .integer_tables
+                    .tables_1d
+                    .get(*values)
+                    .expect("fractional knapsack value table is not in the table registry");
+                let weight_table = registry
+                    .integer_tables
+                    .tables_1d
+                    .get(*weights)
+                    .expect("fractional knapsack weight table is not in the table registry");
+
+                assert_eq!(
+                    value_table.0.len(),
+                    weight_table.0.len(),
+                    "fractional knapsack value table length must equal weight table length",
+                );
+
+                let items =
+                    value_table.0.iter().zip(&weight_table.0).enumerate().map(
+                        |(i, (&value, &weight))| (i, value as Continuous, weight as Continuous),
+                    );
+                let sorted_items = algorithms::sort_fractional_knapsack_items_with_indices(items);
+
+                simplify_fractional_knapsack_sorted(set, capacity, sorted_items)
+            }
+            Self::FractionalKnapsackContinuousTable(set, capacity, values, weights) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                let value_table = registry
+                    .continuous_tables
+                    .tables_1d
+                    .get(*values)
+                    .expect("fractional knapsack value table is not in the table registry");
+                let weight_table = registry
+                    .continuous_tables
+                    .tables_1d
+                    .get(*weights)
+                    .expect("fractional knapsack weight table is not in the table registry");
+
+                assert_eq!(
+                    value_table.0.len(),
+                    weight_table.0.len(),
+                    "fractional knapsack value table length must equal weight table length",
+                );
+
+                let items = value_table
+                    .0
+                    .iter()
+                    .zip(&weight_table.0)
+                    .enumerate()
+                    .map(|(i, (&value, &weight))| (i, value, weight));
+                let sorted_items = algorithms::sort_fractional_knapsack_items_with_indices(items);
+
+                simplify_fractional_knapsack_sorted(set, capacity, sorted_items)
+            }
+            Self::FractionalKnapsackIntegerValueContinuousWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                let value_table = registry
+                    .integer_tables
+                    .tables_1d
+                    .get(*values)
+                    .expect("fractional knapsack value table is not in the table registry");
+                let weight_table = registry
+                    .continuous_tables
+                    .tables_1d
+                    .get(*weights)
+                    .expect("fractional knapsack weight table is not in the table registry");
+
+                assert_eq!(
+                    value_table.0.len(),
+                    weight_table.0.len(),
+                    "fractional knapsack value table length must equal weight table length",
+                );
+
+                let items = value_table
+                    .0
+                    .iter()
+                    .zip(&weight_table.0)
+                    .enumerate()
+                    .map(|(i, (&value, &weight))| (i, value as Continuous, weight));
+                let sorted_items = algorithms::sort_fractional_knapsack_items_with_indices(items);
+
+                simplify_fractional_knapsack_sorted(set, capacity, sorted_items)
+            }
+            Self::FractionalKnapsackContinuousValueIntegerWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                let set = set.simplify(registry);
+                let capacity = capacity.simplify(registry);
+                let value_table = registry
+                    .continuous_tables
+                    .tables_1d
+                    .get(*values)
+                    .expect("fractional knapsack value table is not in the table registry");
+                let weight_table = registry
+                    .integer_tables
+                    .tables_1d
+                    .get(*weights)
+                    .expect("fractional knapsack weight table is not in the table registry");
+
+                assert_eq!(
+                    value_table.0.len(),
+                    weight_table.0.len(),
+                    "fractional knapsack value table length must equal weight table length",
+                );
+
+                let items = value_table
+                    .0
+                    .iter()
+                    .zip(&weight_table.0)
+                    .enumerate()
+                    .map(|(i, (&value, &weight))| (i, value, weight as Continuous));
+                let sorted_items = algorithms::sort_fractional_knapsack_items_with_indices(items);
+
+                simplify_fractional_knapsack_sorted(set, capacity, sorted_items)
+            }
             _ => self.clone(),
         }
     }
@@ -2230,6 +4015,7 @@ impl ContinuousExpression {
 
 #[cfg(test)]
 mod tests {
+    use super::super::condition::ComparisonOperator;
     use super::super::table_expression::TableExpression;
     use super::*;
     use crate::state::*;
@@ -2514,6 +4300,91 @@ mod tests {
                 Box::new(ContinuousExpression::ResourceVariable(0))
             )
         );
+    }
+
+    #[test]
+    fn fractional_knapsack_ok() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+        let values = vec![
+            ContinuousExpression::from(2.0),
+            ContinuousExpression::from(3.0),
+            ContinuousExpression::from(5.0),
+            ContinuousExpression::from(10.0),
+        ];
+        let weights = vec![
+            ContinuousExpression::from(1.0),
+            ContinuousExpression::from(2.0),
+            ContinuousExpression::from(4.0),
+            ContinuousExpression::from(1.0),
+        ];
+
+        let result =
+            ContinuousExpression::fractional_knapsack(set.clone(), capacity, values, weights);
+
+        assert!(result.is_ok());
+        let expression = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousExpression::FractionalKnapsack(
+                Box::new(SetExpression::from(set)),
+                Box::new(ContinuousExpression::from(capacity)),
+                vec![
+                    (
+                        0,
+                        ContinuousExpression::from(2.0),
+                        ContinuousExpression::from(1.0)
+                    ),
+                    (
+                        1,
+                        ContinuousExpression::from(3.0),
+                        ContinuousExpression::from(2.0)
+                    ),
+                    (
+                        2,
+                        ContinuousExpression::from(5.0),
+                        ContinuousExpression::from(4.0)
+                    ),
+                    (
+                        3,
+                        ContinuousExpression::from(10.0),
+                        ContinuousExpression::from(1.0)
+                    )
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_err() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+        let values = vec![
+            ContinuousExpression::from(2.0),
+            ContinuousExpression::from(3.0),
+            ContinuousExpression::from(5.0),
+            ContinuousExpression::from(10.0),
+        ];
+        let weights = vec![
+            ContinuousExpression::from(1.0),
+            ContinuousExpression::from(2.0),
+            ContinuousExpression::from(4.0),
+        ];
+
+        let result =
+            ContinuousExpression::fractional_knapsack(set.clone(), capacity, values, weights);
+
+        assert!(result.is_err());
     }
 
     #[test]
@@ -6875,6 +8746,51 @@ mod tests {
                 ReferenceExpression::Variable(v.id())
             ))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.len_continuous(),
+            ContinuousExpression::Cardinality(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(v.id())
+            ))
+        );
+    }
+
+    #[test]
+    fn set_reduce() {
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let value = ContinuousExpression::Constant(2.0);
+
+        assert_eq!(
+            set.clone().sum_continuous(x, value.clone()),
+            ContinuousExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(set.clone()),
+                x.id(),
+                Box::new(value.clone())
+            )
+        );
+
+        let condition = Condition::comparison_e(ComparisonOperator::Ge, x, 1);
+        assert_eq!(
+            set.clone()
+                .filter(x, condition.clone())
+                .sum_continuous(x, value.clone()),
+            ContinuousExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(SetExpression::Filter(
+                    Box::new(set),
+                    x.id(),
+                    Box::new(condition),
+                )),
+                x.id(),
+                Box::new(value)
+            )
+        );
     }
 
     #[test]
@@ -7962,6 +9878,154 @@ mod tests {
     }
 
     #[test]
+    fn minimum_spanning_tree_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry {
+            continuous_tables: crate::table_data::TableData {
+                tables_2d: vec![crate::table::Table2D::new(vec![
+                    vec![0.0, 1.5, 4.0, 3.0],
+                    vec![1.5, 0.0, 2.0, 5.0],
+                    vec![4.0, 2.0, 0.0, 6.0],
+                    vec![3.0, 5.0, 6.0, 0.0],
+                ])],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = ContinuousExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            0,
+        );
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6.5
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_sorted_edges_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(3);
+        let expression = ContinuousExpression::MinimumSpanningTreeWithSortedEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (0, 1, 1.5),
+                (1, 2, 2.0),
+                (0, 3, 3.0),
+                (0, 2, 4.0),
+                (1, 3, 5.0),
+                (2, 3, 6.0),
+            ],
+        );
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            4.5
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        // Edges are deliberately given out of weight order to confirm they are sorted before
+        // running Kruskal's algorithm.
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (2, 3, ContinuousExpression::Constant(6.0)),
+                (1, 3, ContinuousExpression::Constant(5.0)),
+                (0, 3, ContinuousExpression::Constant(3.0)),
+                (1, 2, ContinuousExpression::Constant(2.0)),
+                (0, 2, ContinuousExpression::Constant(4.0)),
+                (0, 1, ContinuousExpression::Constant(1.0)),
+            ],
+        );
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6.0
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_and_connectivity_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        // The cheap edge (0, 1) is not present, so the tree must route through more expensive edges.
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (
+                    0,
+                    1,
+                    ContinuousExpression::Constant(1.0),
+                    Condition::Constant(false),
+                ),
+                (
+                    0,
+                    2,
+                    ContinuousExpression::Constant(4.0),
+                    Condition::Constant(true),
+                ),
+                (
+                    0,
+                    3,
+                    ContinuousExpression::Constant(3.0),
+                    Condition::Constant(true),
+                ),
+                (
+                    1,
+                    2,
+                    ContinuousExpression::Constant(2.0),
+                    Condition::Constant(true),
+                ),
+                (
+                    1,
+                    3,
+                    ContinuousExpression::Constant(5.0),
+                    Condition::Constant(true),
+                ),
+                (
+                    2,
+                    3,
+                    ContinuousExpression::Constant(6.0),
+                    Condition::Constant(true),
+                ),
+            ],
+        );
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            9.0
+        );
+    }
+
+    #[test]
     fn if_eval() {
         let state = State::default();
         let state_functions = StateFunctions::default();
@@ -8001,6 +10065,406 @@ mod tests {
         assert_eq!(
             expression.eval(&state, &mut function_cache, &state_functions, &registry),
             1.0
+        );
+    }
+
+    #[test]
+    fn reduce_eval_restores_local_environment() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let table = registry
+            .add_table_1d("values", vec![1.5, 2.5, 3.5])
+            .unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = SetExpression::from(set)
+            .sum_continuous(x, Table1DHandle::<Continuous>::element(&table, x));
+        let mut local_environment = LocalEnvironment::default();
+        local_environment.set(x.id(), 1);
+
+        assert_relative_eq!(
+            expression.eval_with_local_environment(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
+            5.0
+        );
+        assert_eq!(local_environment.get(x.id()), Some(1));
+
+        let mut local_environment = LocalEnvironment::default();
+        let _ = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+        assert_eq!(local_environment.get(x.id()), None);
+    }
+
+    #[test]
+    fn filter_reduce_eval_restores_local_environment() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let y = local_variable_data.add("y").unwrap();
+        let table = registry
+            .add_table_1d("values", vec![1.5, 2.5, 3.5])
+            .unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::FilterReduce(
+            ReduceOperator::Sum,
+            Box::new(SetExpression::from(set)),
+            x.id(),
+            y.id(),
+            Box::new(Condition::comparison_e(ComparisonOperator::Ge, x, 1)),
+            Box::new(Table1DHandle::<Continuous>::element(&table, y)),
+        );
+        let mut local_environment = LocalEnvironment::default();
+        local_environment.set(x.id(), 0);
+        local_environment.set(y.id(), 2);
+
+        assert_relative_eq!(
+            expression.eval_with_local_environment(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
+            6.0
+        );
+        assert_eq!(local_environment.get(x.id()), Some(0));
+        assert_eq!(local_environment.get(y.id()), Some(2));
+
+        let mut local_environment = LocalEnvironment::default();
+        let _ = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+        assert_eq!(local_environment.get(x.id()), None);
+        assert_eq!(local_environment.get(y.id()), None);
+    }
+
+    #[test]
+    fn fractional_knapsack_sorted_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+
+        let expression = ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            vec![(3, 10.0, 1.0), (0, 2.0, 1.0), (1, 3.0, 2.0), (2, 5.0, 4.0)],
+        );
+
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            7.5
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+
+        let expression = ContinuousExpression::FractionalKnapsack(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            vec![
+                (
+                    0,
+                    ContinuousExpression::from(2.0),
+                    ContinuousExpression::from(1.0),
+                ),
+                (
+                    1,
+                    ContinuousExpression::from(3.0),
+                    ContinuousExpression::from(2.0),
+                ),
+                (
+                    2,
+                    ContinuousExpression::from(5.0),
+                    ContinuousExpression::from(4.0),
+                ),
+                (
+                    3,
+                    ContinuousExpression::from(10.0),
+                    ContinuousExpression::from(1.0),
+                ),
+            ],
+        );
+
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            7.5
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_eval_with_outer_local_variable() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+
+        let mut outer_set = Set::with_capacity(2);
+        outer_set.insert(0);
+        outer_set.insert(1);
+        let mut first_set = Set::with_capacity(2);
+        first_set.insert(0);
+        let mut second_set = Set::with_capacity(2);
+        second_set.insert(1);
+        let item_set = SetExpression::If(
+            Box::new(Condition::comparison_e(ComparisonOperator::Eq, x, 0)),
+            Box::new(SetExpression::from(first_set)),
+            Box::new(SetExpression::from(second_set)),
+        );
+
+        let sorted = ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(item_set.clone()),
+            Box::new(ContinuousExpression::Constant(1.0)),
+            vec![(1, 4.0, 1.0), (0, 2.0, 1.0)],
+        );
+        let expression = SetExpression::from(outer_set.clone()).sum_continuous(x, sorted);
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6.0
+        );
+
+        let unsorted = ContinuousExpression::FractionalKnapsack(
+            Box::new(item_set),
+            Box::new(ContinuousExpression::Constant(1.0)),
+            vec![
+                (
+                    0,
+                    ContinuousExpression::Constant(2.0),
+                    ContinuousExpression::Constant(1.0),
+                ),
+                (
+                    1,
+                    ContinuousExpression::Constant(4.0),
+                    ContinuousExpression::Constant(1.0),
+                ),
+            ],
+        );
+        let expression = SetExpression::from(outer_set).sum_continuous(x, unsorted);
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6.0
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_integer_table_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry {
+            integer_tables: crate::table_data::TableData {
+                tables_1d: vec![
+                    crate::table::Table1D::new(vec![2, 3, 5, 10]),
+                    crate::table::Table1D::new(vec![1, 2, 4, 1]),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::FractionalKnapsackIntegerTable(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            Box::new(ContinuousExpression::Constant(5.0)),
+            0,
+            1,
+        );
+
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            7.5
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_continuous_table_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry {
+            continuous_tables: crate::table_data::TableData {
+                tables_1d: vec![
+                    crate::table::Table1D::new(vec![2.0, 3.0, 5.0, 10.0]),
+                    crate::table::Table1D::new(vec![1.0, 2.0, 4.0, 1.0]),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::FractionalKnapsackContinuousTable(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            Box::new(ContinuousExpression::Constant(5.0)),
+            0,
+            1,
+        );
+
+        assert_relative_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            7.5
+        );
+    }
+
+    #[test]
+    fn reduce_simplify() {
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let y = local_variable_data.add("y").unwrap();
+        let table = registry
+            .add_table_1d("values", vec![1.0, 2.0, 3.0])
+            .unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = SetExpression::from(set.clone()).sum_continuous(x, 2.0.into());
+
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(6.0)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .sum_continuous(x, Table1DHandle::<Continuous>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(6.0)
+        );
+
+        let expression =
+            SetExpression::from(set).sum_continuous(x, ContinuousExpression::Variable(0));
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = SetExpression::Reference(ReferenceExpression::Variable(0))
+            .sum_continuous(x, ContinuousExpression::Variable(0));
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let condition = Condition::comparison_e(ComparisonOperator::Ge, x, 1);
+        let expression = set
+            .clone()
+            .filter(x, condition.clone())
+            .sum_continuous(y, Table1DHandle::<Continuous>::element(&table, y));
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::FilterReduce(
+                ReduceOperator::Sum,
+                Box::new(set.clone()),
+                x.id(),
+                y.id(),
+                Box::new(condition),
+                Box::new(Table1DHandle::<Continuous>::element(&table, y)),
+            )
+        );
+
+        let expression = set
+            .clone()
+            .sum_continuous(x, Table1DHandle::<Continuous>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Sum,
+                table.id(),
+                set,
+            )))
+        );
+    }
+
+    #[test]
+    fn filter_reduce_simplify() {
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let table = registry
+            .add_table_1d("values", vec![1.0, 2.0, 3.0])
+            .unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(true))
+            .sum_continuous(x, 2.0.into());
+
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(6.0)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(false))
+            .sum_continuous(x, 2.0.into());
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(0.0)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::comparison_e(ComparisonOperator::Ge, x, 1))
+            .sum_continuous(x, Table1DHandle::<Continuous>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(5.0)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(true))
+            .sum_continuous(x, ContinuousExpression::Variable(0));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::from(set).sum_continuous(x, ContinuousExpression::Variable(0))
         );
     }
 
@@ -8162,6 +10626,263 @@ mod tests {
     }
 
     #[test]
+    fn minimum_spanning_tree_simplify() {
+        let registry = TableRegistry {
+            continuous_tables: crate::table_data::TableData {
+                tables_2d: vec![crate::table::Table2D::new(vec![
+                    vec![0.0, 1.5, 4.0, 3.0],
+                    vec![1.5, 0.0, 2.0, 5.0],
+                    vec![4.0, 2.0, 0.0, 6.0],
+                    vec![3.0, 5.0, 6.0, 0.0],
+                ])],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = ContinuousExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            0,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(6.5)
+        );
+
+        let expression = ContinuousExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            0,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![
+                    (0, 1, 1.5),
+                    (1, 2, 2.0),
+                    (0, 3, 3.0),
+                    (0, 2, 4.0),
+                    (1, 3, 5.0),
+                    (2, 3, 6.0),
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_simplify() {
+        let registry = TableRegistry::default();
+        let edges = vec![
+            (0, 2, ContinuousExpression::Constant(4.0)),
+            (1, 2, ContinuousExpression::Constant(2.0)),
+            (0, 1, ContinuousExpression::Constant(1.5)),
+        ];
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges.clone(),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(3.5)
+        );
+
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            edges,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![(0, 1, 1.5), (1, 2, 2.0), (0, 2, 4.0)]
+            )
+        );
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let edges = vec![
+            (0, 1, ContinuousExpression::Variable(0)),
+            (0, 2, ContinuousExpression::Constant(4.0)),
+            (1, 2, ContinuousExpression::Constant(2.0)),
+        ];
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges,
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_and_connectivity_simplify() {
+        let registry = TableRegistry::default();
+        let edges = vec![
+            (
+                0,
+                1,
+                ContinuousExpression::Constant(1.0),
+                Condition::Constant(false),
+            ),
+            (
+                0,
+                2,
+                ContinuousExpression::Constant(4.0),
+                Condition::Constant(true),
+            ),
+            (
+                0,
+                3,
+                ContinuousExpression::Constant(3.0),
+                Condition::Constant(true),
+            ),
+            (
+                1,
+                2,
+                ContinuousExpression::Constant(2.0),
+                Condition::Constant(true),
+            ),
+            (
+                1,
+                3,
+                ContinuousExpression::Constant(5.0),
+                Condition::Constant(true),
+            ),
+            (
+                2,
+                3,
+                ContinuousExpression::Constant(6.0),
+                Condition::Constant(true),
+            ),
+        ];
+
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges.clone(),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(9.0)
+        );
+
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            edges,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![
+                    (1, 2, 2.0),
+                    (0, 3, 3.0),
+                    (0, 2, 4.0),
+                    (1, 3, 5.0),
+                    (2, 3, 6.0)
+                ]
+            )
+        );
+
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let edges = vec![
+            (
+                0,
+                1,
+                ContinuousExpression::Constant(1.0),
+                Condition::Table(Box::new(TableExpression::Table1D(
+                    0,
+                    ElementExpression::Variable(0),
+                ))),
+            ),
+            (
+                0,
+                2,
+                ContinuousExpression::Constant(4.0),
+                Condition::Constant(true),
+            ),
+        ];
+        let expression = ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges,
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn fractional_knapsack_integer_table_simplify() {
+        let registry = TableRegistry {
+            integer_tables: crate::table_data::TableData {
+                tables_1d: vec![
+                    crate::table::Table1D::new(vec![2, 3, 5, 10]),
+                    crate::table::Table1D::new(vec![1, 2, 4, 1]),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::FractionalKnapsackIntegerTable(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            Box::new(ContinuousExpression::Constant(5.0)),
+            0,
+            1,
+        );
+
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(7.5)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn fractional_knapsack_integer_table_simplify_length_mismatch_panics() {
+        let registry = TableRegistry {
+            integer_tables: crate::table_data::TableData {
+                tables_1d: vec![
+                    crate::table::Table1D::new(vec![2, 3, 5, 10]),
+                    crate::table::Table1D::new(vec![1, 2]),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = ContinuousExpression::FractionalKnapsackIntegerTable(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            Box::new(ContinuousExpression::Constant(5.0)),
+            0,
+            1,
+        );
+
+        expression.simplify(&registry);
+    }
+
+    #[test]
     fn if_simplify() {
         let registry = TableRegistry::default();
 
@@ -8210,5 +10931,94 @@ mod tests {
         let expression =
             ContinuousExpression::FromInteger(Box::new(IntegerExpression::Variable(0)));
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn fractional_knapsack_sorted_simplify() {
+        let registry = TableRegistry::default();
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+
+        let expression = ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            vec![(3, 10.0, 1.0), (0, 2.0, 1.0), (1, 3.0, 2.0), (2, 5.0, 4.0)],
+        );
+
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(7.5)
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_sorted_simplify_no_change() {
+        let registry = TableRegistry::default();
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+        let result = metadata.add_continuous_variable("v");
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+
+        let expression = ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(v)),
+            vec![(3, 10.0, 1.0), (0, 2.0, 1.0), (1, 3.0, 2.0), (2, 5.0, 4.0)],
+        );
+
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn fractional_knapsack_constant_items_simplify() {
+        let registry = TableRegistry::default();
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object_type"), 4);
+        assert!(result.is_ok());
+        let object_type = result.unwrap();
+
+        let set = metadata.create_set(object_type, &[0, 1, 2]).unwrap();
+        let capacity = 5.0;
+
+        let expression = ContinuousExpression::FractionalKnapsack(
+            Box::new(SetExpression::from(set)),
+            Box::new(ContinuousExpression::from(capacity)),
+            vec![
+                (
+                    3,
+                    ContinuousExpression::from(10.0),
+                    ContinuousExpression::from(1.0),
+                ),
+                (
+                    0,
+                    ContinuousExpression::from(2.0),
+                    ContinuousExpression::from(1.0),
+                ),
+                (
+                    1,
+                    ContinuousExpression::from(3.0),
+                    ContinuousExpression::from(2.0),
+                ),
+                (
+                    2,
+                    ContinuousExpression::from(5.0),
+                    ContinuousExpression::from(4.0),
+                ),
+            ],
+        );
+
+        assert_eq!(
+            expression.simplify(&registry),
+            ContinuousExpression::Constant(7.5)
+        );
     }
 }

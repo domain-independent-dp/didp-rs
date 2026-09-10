@@ -44,6 +44,10 @@ pub fn state_to_yaml(
         element_resource_variable_names,
         resource_variables.element_variables
     );
+    insert_variables!(
+        set_resource_variable_names,
+        resource_variables.set_variables
+    );
 
     Ok(Yaml::Hash(hash))
 }
@@ -69,6 +73,12 @@ mod tests {
         name_to_set_variable.insert("s0".to_string(), 0);
         name_to_set_variable.insert("s1".to_string(), 1);
         let set_variable_to_object = vec![0, 0];
+
+        let set_resource_variable_names = vec!["sr0".to_string(), "sr1".to_string()];
+        let mut name_to_set_resource_variable = FxHashMap::default();
+        name_to_set_resource_variable.insert("sr0".to_string(), 0);
+        name_to_set_resource_variable.insert("sr1".to_string(), 1);
+        let set_resource_variable_to_object = vec![0, 0];
 
         let element_variable_names = vec!["e0".to_string(), "e1".to_string()];
         let mut name_to_element_variable = FxHashMap::default();
@@ -109,6 +119,10 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
+            set_resource_variable_names,
+            name_to_set_resource_variable,
+            set_resource_variable_to_object,
+            set_less_is_better: vec![false, true],
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -126,6 +140,7 @@ mod tests {
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
             continuous_less_is_better: vec![false, true],
+            ..Default::default()
         }
     }
 
@@ -139,6 +154,7 @@ mod tests {
                 ..Default::default()
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(10), Set::with_capacity(10)],
                 integer_variables: vec![2, 2],
                 element_variables: vec![4, 5],
                 continuous_variables: vec![3.5, 4.5],
@@ -170,6 +186,8 @@ mod tests {
         expected_yaml.insert(Yaml::from_str("cr1"), Yaml::Real((4.5).to_string()));
         expected_yaml.insert(Yaml::from_str("er0"), Yaml::Integer(4));
         expected_yaml.insert(Yaml::from_str("er1"), Yaml::Integer(5));
+        expected_yaml.insert(Yaml::from_str("sr0"), Yaml::Array(vec![]));
+        expected_yaml.insert(Yaml::from_str("sr1"), Yaml::Array(vec![]));
 
         assert_eq!(result.unwrap(), Yaml::Hash(expected_yaml));
     }

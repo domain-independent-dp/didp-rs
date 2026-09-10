@@ -1,4 +1,5 @@
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
@@ -67,6 +68,7 @@ impl ArgumentExpression {
         args: I,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Vec<Element>>
@@ -79,22 +81,45 @@ impl ArgumentExpression {
                 ArgumentExpression::Set(set) => {
                     result = match set {
                         SetExpression::Reference(set) => {
-                            let set = set.eval(state, function_cache, state_functions, registry);
+                            let set = set.eval(
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            );
                             util::expand_vector_with_set(result, set)
                         }
                         SetExpression::StateFunction(i) => {
-                            let set =
-                                function_cache.get_set_value(*i, state, state_functions, registry);
+                            let set = function_cache.get_set_value(
+                                *i,
+                                state,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            );
                             util::expand_vector_with_set(result, set)
                         }
                         _ => util::expand_vector_with_set(
                             result,
-                            &set.eval(state, function_cache, state_functions, registry),
+                            &set.eval_with_local_environment(
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            ),
                         ),
                     }
                 }
                 ArgumentExpression::Element(element) => {
-                    let element = element.eval(state, function_cache, state_functions, registry);
+                    let element = element.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     result.iter_mut().for_each(|r| r.push(element));
                 }
             }
@@ -279,8 +304,9 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
@@ -304,6 +330,7 @@ mod tests {
                 args.iter(),
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry
             ),
@@ -360,6 +387,7 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
         let args = [
             ElementExpression::from(8).into(),
@@ -373,6 +401,7 @@ mod tests {
                 args.iter(),
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry
             ),
@@ -413,6 +442,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
         let args = vec![
             ArgumentExpression::Element(ElementExpression::Constant(8)),
@@ -429,6 +459,7 @@ mod tests {
                 args.iter(),
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry
             ),

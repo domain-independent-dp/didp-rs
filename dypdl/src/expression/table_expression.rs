@@ -1,4 +1,5 @@
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::TableData;
@@ -35,28 +36,71 @@ impl<T: Clone> TableExpression<T> {
         &'a self,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &'a TableRegistry,
         tables: &'a TableData<T>,
     ) -> &'a T {
         match self {
             Self::Constant(value) => value,
-            Self::Table1D(i, x) => {
-                tables.tables_1d[*i].get(x.eval(state, function_cache, state_functions, registry))
-            }
+            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval_with_local_environment(
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
             Self::Table2D(i, x, y) => tables.tables_2d[*i].get(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table3D(i, x, y, z) => tables.tables_3d[*i].get(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
-                z.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                z.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table(i, args) => {
                 let args: Vec<Element> = args
                     .iter()
-                    .map(|x| x.eval(state, function_cache, state_functions, registry))
+                    .map(|x| {
+                        x.eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                    })
                     .collect();
                 tables.tables[*i].get(&args)
             }
@@ -201,12 +245,14 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
 
         let expression = TableExpression::Constant(1);
         assert_eq!(
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -221,11 +267,13 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(0));
         assert_eq!(
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -237,6 +285,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -251,6 +300,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table2D(
             0,
             ElementExpression::Constant(0),
@@ -260,6 +310,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -275,6 +326,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -289,6 +341,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table3D(
             0,
             ElementExpression::Constant(0),
@@ -299,6 +352,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -315,6 +369,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -329,6 +384,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table(
             0,
             vec![
@@ -342,6 +398,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -361,6 +418,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -380,6 +438,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables

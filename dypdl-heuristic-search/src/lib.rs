@@ -21,6 +21,7 @@ mod dual_bound_lnsbs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
 mod f_evaluator_type;
+mod labeling;
 pub mod parallel_search_algorithm;
 pub mod search_algorithm;
 
@@ -43,6 +44,7 @@ pub use dual_bound_lnsbs::create_dual_bound_lnsbs;
 pub use dual_bound_weighted_astar::create_dual_bound_weighted_astar;
 pub use expression_beam_search::{CustomExpressionParameters, ExpressionBeamSearch};
 pub use f_evaluator_type::FEvaluatorType;
+pub use labeling::create_labeling;
 pub use parallel_search_algorithm::{
     ConcurrentStateRegistry, CostNodeMessage, FNodeMessage, SendableCostNode, SendableFNode,
 };

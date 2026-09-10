@@ -1,7 +1,10 @@
-use super::data_structure::{StateInformation};
+use super::data_structure::StateInformation;
 use super::StateInRegistry;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, State, StateFunctionCache, StateInterface, TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, State, StateFunctionCache, StateInterface,
+    TransitionInterface,
+};
 use std::fmt::Debug;
 use std::hash::Hash;
 

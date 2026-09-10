@@ -12,6 +12,8 @@ pub struct Effect {
     pub integer_effects: Vec<(usize, expression::IntegerExpression)>,
     /// Pairs of the index of a continuous variable and a continuous expression.
     pub continuous_effects: Vec<(usize, expression::ContinuousExpression)>,
+    /// Pairs of the index of an set resource variable and an set expression.
+    pub set_resource_effects: Vec<(usize, expression::SetExpression)>,
     /// Pairs of the index of an element resource variable and an element expression.
     pub element_resource_effects: Vec<(usize, expression::ElementExpression)>,
     /// Pairs of the index of an integer resource variable and an integer expression.

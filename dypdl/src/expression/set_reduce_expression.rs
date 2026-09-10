@@ -2,6 +2,7 @@ use super::argument_expression::ArgumentExpression;
 use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
+use super::LocalEnvironment;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table::{Table1D, Table2D};
@@ -78,11 +79,12 @@ impl SetReduceExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transitioned state is used or an empty set is passed to a reduce operation or a min/max reduce operation is performed on an empty set.
     pub fn eval<U: StateInterface>(
         &self,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Set {
@@ -92,76 +94,190 @@ impl SetReduceExpression {
             Self::Constant(set) => set.clone(),
             Self::Table1D(op, capacity, i, x) => match x.as_ref() {
                 ArgumentExpression::Element(x) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     set_tables.tables_1d[*i].get(x).clone()
                 }
                 ArgumentExpression::Set(SetExpression::Reference(x)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x.ones())
                 }
                 ArgumentExpression::Set(SetExpression::StateFunction(x)) => {
-                    let x = function_cache.get_set_value(*x, state, state_functions, registry);
+                    let x = function_cache.get_set_value(
+                        *x,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x.ones())
                 }
                 ArgumentExpression::Set(x) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x.ones())
                 }
             },
             Self::Table2D(op, capacity, i, x, y) => match (x.as_ref(), y.as_ref()) {
                 (ArgumentExpression::Element(x), ArgumentExpression::Element(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     set_tables.tables_2d[*i].get(x, y).clone()
                 }
                 (
                     ArgumentExpression::Element(x),
                     ArgumentExpression::Set(SetExpression::Reference(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y.ones())
                 }
                 (
                     ArgumentExpression::Element(x),
                     ArgumentExpression::Set(SetExpression::StateFunction(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = function_cache.get_set_value(*y, state, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = function_cache.get_set_value(
+                        *y,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y.ones())
                 }
                 (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y.ones())
                 }
                 (
                     ArgumentExpression::Set(SetExpression::Reference(x)),
                     ArgumentExpression::Element(y),
                 ) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
                 }
                 (
                     ArgumentExpression::Set(SetExpression::StateFunction(x)),
                     ArgumentExpression::Element(y),
                 ) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = function_cache.get_set_value(*x, state, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = function_cache.get_set_value(
+                        *x,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
                 }
                 (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
                 }
                 (
                     ArgumentExpression::Set(SetExpression::StateFunction(x)),
                     ArgumentExpression::Set(SetExpression::StateFunction(y)),
                 ) => {
-                    let (x, y) =
-                        function_cache.get_set_value_pair(*x, *y, state, state_functions, registry);
+                    let (x, y) = function_cache.get_set_value_pair(
+                        *x,
+                        *y,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -174,8 +290,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(SetExpression::StateFunction(x)),
                     ArgumentExpression::Set(SetExpression::Reference(y)),
                 ) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = function_cache.get_set_value(*x, state, state_functions, registry);
+                    let y = y.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = function_cache.get_set_value(
+                        *x,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -188,8 +316,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(SetExpression::Reference(x)),
                     ArgumentExpression::Set(SetExpression::StateFunction(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = function_cache.get_set_value(*y, state, state_functions, registry);
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = function_cache.get_set_value(
+                        *y,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -202,8 +342,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(SetExpression::StateFunction(x)),
                     ArgumentExpression::Set(y),
                 ) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = function_cache.get_set_value(*x, state, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = function_cache.get_set_value(
+                        *x,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -216,8 +368,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(x),
                     ArgumentExpression::Set(SetExpression::StateFunction(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = function_cache.get_set_value(*y, state, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = function_cache.get_set_value(
+                        *y,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -230,8 +394,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(SetExpression::Reference(x)),
                     ArgumentExpression::Set(SetExpression::Reference(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -244,8 +420,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(x),
                     ArgumentExpression::Set(SetExpression::Reference(y)),
                 ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -258,8 +446,20 @@ impl SetReduceExpression {
                     ArgumentExpression::Set(SetExpression::Reference(x)),
                     ArgumentExpression::Set(y),
                 ) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -269,8 +469,20 @@ impl SetReduceExpression {
                     )
                 }
                 (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::reduce_table_2d_set_y(
                         op,
                         *capacity,
@@ -285,6 +497,7 @@ impl SetReduceExpression {
                     [x.as_ref(), y.as_ref(), z.as_ref()].into_iter(),
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 );
@@ -298,6 +511,7 @@ impl SetReduceExpression {
                     args.iter(),
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 );
@@ -313,7 +527,7 @@ impl SetReduceExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> Self {
         let set_tables = &registry.set_tables;
         match self {
@@ -556,10 +770,17 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
         let expression = SetReduceExpression::Constant(Set::with_capacity(3));
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             Set::with_capacity(3)
         );
     }
@@ -569,6 +790,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_1d: vec![Table1D::new(vec![
@@ -596,7 +818,13 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(0);
@@ -611,6 +839,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_1d: vec![Table1D::new(vec![
@@ -645,7 +874,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(1);
@@ -665,6 +900,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_1d: vec![Table1D::new(vec![
@@ -694,7 +930,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(1);
@@ -752,6 +994,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -764,6 +1007,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -808,7 +1052,13 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -823,6 +1073,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -874,7 +1125,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -896,6 +1153,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -942,7 +1200,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -958,6 +1222,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1009,7 +1274,13 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1031,6 +1302,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1077,7 +1349,13 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1093,6 +1371,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1151,7 +1430,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1175,6 +1460,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1228,7 +1514,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1252,6 +1544,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1305,7 +1598,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1329,6 +1628,7 @@ mod tests {
         };
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_2d: vec![Table2D::new(vec![
@@ -1377,7 +1677,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1452,6 +1758,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -1521,6 +1828,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -1595,6 +1903,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -1666,6 +1975,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -1737,6 +2047,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry
             ),
@@ -1749,6 +2060,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables_3d: vec![Table3D::new(vec![vec![
@@ -1808,7 +2120,13 @@ mod tests {
             ))),
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -1826,6 +2144,7 @@ mod tests {
         let state = State::default();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry {
             set_tables: TableData {
                 tables: vec![Table::new(
@@ -1884,7 +2203,13 @@ mod tests {
             ],
         );
         assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             {
                 let mut set = Set::with_capacity(5);
                 set.insert(0);
@@ -2497,7 +2822,7 @@ mod tests {
                 SetReduceOperator::Union,
                 5,
                 0,
-                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0),)),
                 Box::new(ArgumentExpression::Set(SetExpression::Reference(
                     ReferenceExpression::Constant({
                         let mut set = Set::with_capacity(2);
@@ -2665,8 +2990,8 @@ mod tests {
                 5,
                 0,
                 vec![
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
                     ArgumentExpression::Set(SetExpression::Reference(
                         ReferenceExpression::Constant({
                             let mut set = Set::with_capacity(2);

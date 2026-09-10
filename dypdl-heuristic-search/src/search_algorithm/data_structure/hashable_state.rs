@@ -41,6 +41,8 @@ impl From<dypdl::SignatureVariables> for HashableSignatureVariables {
 /// However, using continuous variables is not recommended as it may cause a numerical issue.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct HashableResourceVariables {
+    /// Set variables.
+    pub set_variables: Vec<Set>,
     /// Element variables.
     pub element_variables: Vec<Element>,
     /// Integer numeric variables.
@@ -52,6 +54,7 @@ pub struct HashableResourceVariables {
 impl From<dypdl::ResourceVariables> for HashableResourceVariables {
     fn from(variables: dypdl::ResourceVariables) -> HashableResourceVariables {
         HashableResourceVariables {
+            set_variables: variables.set_variables,
             element_variables: variables.element_variables,
             integer_variables: variables.integer_variables,
             continuous_variables: variables
@@ -120,6 +123,16 @@ impl dypdl::StateInterface for HashableState {
     #[inline]
     fn get_continuous_variable(&self, i: usize) -> Continuous {
         self.signature_variables.continuous_variables[i].into_inner()
+    }
+
+    #[inline]
+    fn get_number_of_set_resource_variables(&self) -> usize {
+        self.resource_variables.set_variables.len()
+    }
+
+    #[inline]
+    fn get_set_resource_variable(&self, i: usize) -> &Set {
+        &self.resource_variables.set_variables[i]
     }
 
     #[inline]
@@ -228,6 +241,16 @@ impl dypdl::StateInterface for StateWithHashableSignatureVariables {
     }
 
     #[inline]
+    fn get_number_of_set_resource_variables(&self) -> usize {
+        self.resource_variables.set_variables.len()
+    }
+
+    #[inline]
+    fn get_set_resource_variable(&self, i: usize) -> &Set {
+        &self.resource_variables.set_variables[i]
+    }
+
+    #[inline]
     fn get_number_of_element_resource_variables(&self) -> usize {
         self.resource_variables.element_variables.len()
     }
@@ -294,6 +317,7 @@ mod tests {
 
     fn generate_resource_variables() -> dypdl::ResourceVariables {
         dypdl::ResourceVariables {
+            set_variables: vec![],
             element_variables: vec![0, 1],
             integer_variables: vec![4, 5, 6],
             continuous_variables: vec![4.0, 5.0, 6.0],
@@ -304,6 +328,7 @@ mod tests {
         let resource_variables = generate_resource_variables();
 
         HashableResourceVariables {
+            set_variables: resource_variables.set_variables,
             element_variables: resource_variables.element_variables,
             integer_variables: resource_variables.integer_variables,
             continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
@@ -368,6 +393,7 @@ mod tests {
 
         dypdl::Effect {
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            set_resource_effects: vec![],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
@@ -744,6 +770,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                set_variables: vec![],
                 element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
@@ -1072,6 +1099,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![],
                 element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],

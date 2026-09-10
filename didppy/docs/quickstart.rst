@@ -27,9 +27,10 @@ Modeling in DIDPPy
 
 Now, let's model the above DP formulation in DIDPPy.
 Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`, :math:`w_3 = 40`, :math:`v_0 = 5`, :math:`v_1 = 25`, :math:`v_2 = 35`, :math:`v_3 = 50`, and :math:`c = 50`.
+We add a dummy item :math:`4` with :math:`w_4 = 0` and :math:`v_4 = 0` to terminate the recursion.
 
 .. code-block:: python
-
+    import math
     import didppy as dp
 
     n = 4
@@ -39,12 +40,12 @@ Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`
 
     model = dp.Model(maximize=True, float_cost=False)
 
-    item = model.add_object_type(number=n)
-    r = model.add_int_var(target=capacity)
+    item = model.add_object_type(number=n+1)
+    r = model.add_int_resource_var(target=capacity, less_is_better=False)
     i = model.add_element_var(object_type=item, target=0)
 
-    w = model.add_int_table(weights)
-    p = model.add_int_table(profits)
+    w = model.add_int_table(weights + [0])
+    p = model.add_int_table(profits + [0])
 
     pack = dp.Transition(
         name="pack",
@@ -64,34 +65,24 @@ Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`
 
     model.add_base_case([i == n])
 
+    remaining_items = model.add_set_table([list(range(i, n)) for i in range(n+1)], object_type=item)
+    model.add_dual_bound(math.floor(dp.fractional_knapsack(remaining_items[i], r, p, w)))
+
 We will explain the details in the :doc:`tutorial <tutorial>`, but here is a summary:
 
 * State variables :code:`r` and :code:`i`, corresponding to :math:`r` and :math:`i`, are defined with the *target* values :code:`c` and :code:`0`, which states that we want to compute :math:`V(c, 0)`.
+* Given :math:`i`, a state with larger :math:`r` is better, so we define :code:`r`using :meth:`~didppy.Model.add_int_resource_var` and set :code:`less_is_better=False`.
 * Recursive equations are defined by transitions, which change the state variables and the cost.
 * The cost of the subproblem on the right-hand side of the recursive equations is represented by :meth:`~didppy.IntExpr.state_cost`.
 * The condition to terminate the recursion is defined by the base case :code:`i == n`.
+* The dual bound is defined by the fractional knapsack problem (:func:`~didppy.fractional_knapsack`), which is a relaxation of the knapsack problem.
 
 Solving the Model
 -----------------
 
 Once you have the model, you can use solvers provided by DIDPPy to solve the model.
 You do not need to implement the DP algorithm yourself.
-Let's use :class:`~didppy.ForwardRecursion` to solve the model.
-
-.. code-block:: python
-
-    solver = dp.ForwardRecursion(model)
-    solution = solver.search()
-
-    for i, t in enumerate(solution.transitions):
-        if t.name == "pack":
-            print("pack {}".format(i))
-
-    print("profit: {}".format(solution.cost))
-
-This solver is the most generic, i.e., it can handle almost any model you can formulate in DIDPPy.
-However, if your DP model has a particular structure, you can use more efficient solvers.
-For example. you can use :class:`~didppy.CABS` for this model.
+Let's use :class:`~didppy.CABS` to solve the model.
 
 .. code-block:: python
 

@@ -13,3 +13,4 @@ On our `repository <https://github.com/domain-independent-dp/didp-rs/tree/main/d
 * `Graph-clear <https://colab.research.google.com/github/domain-independent-dp/didp-rs/blob/main/didppy/examples/graph-clear.ipynb>`_ : the DP model is based on the state-based formula in :cite:t:`Morin2018`.
 * `Talent scheduling <https://colab.research.google.com/github/domain-independent-dp/didp-rs/blob/main/didppy/examples/talent-scheduling.ipynb>`_ : the DP model is based on :cite:t:`GarciaDeLaBanda2011`.
 * `Single machine total weighted tardiness with precedence <https://colab.research.google.com/github/domain-independent-dp/didp-rs/blob/main/didppy/examples/single-machine.ipynb>`_ : the DP model is based on :cite:t:`AbdulRazaq1990`.
+* `Orienteering problem with time windows (OPTW) <https://colab.research.google.com/github/domain-independent-dp/didp-rs/blob/main/didppy/examples/optw.ipynb>`_ : the DP model is based on :cite:t:`Righini2009`.

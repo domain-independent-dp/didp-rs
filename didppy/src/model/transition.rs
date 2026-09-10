@@ -260,6 +260,16 @@ impl TransitionPy {
                     ExprUnion::Set(SetExprPy::from(SetExpression::from(var)))
                 }
             }
+            VarUnion::SetResource(var) => {
+                let id = SetResourceVariable::from(var).id();
+                let effect = Self::get_effect(id, &self.0.effect.set_resource_effects);
+
+                if let Some(effect) = effect {
+                    ExprUnion::Set(SetExprPy::from(effect))
+                } else {
+                    ExprUnion::Set(SetExprPy::from(SetExpression::from(var)))
+                }
+            }
             VarUnion::Int(var) => {
                 let id = IntegerVariable::from(var).id();
                 let effect = Self::get_effect(id, &self.0.effect.integer_effects);
@@ -322,6 +332,12 @@ impl TransitionPy {
                 let expr: SetUnion = expr.extract()?;
                 let expr = SetExpression::from(expr);
                 Self::set_effect(var.id(), expr, &mut self.0.effect.set_effects);
+            }
+            VarUnion::SetResource(var) => {
+                let var = SetResourceVariable::from(var);
+                let expr: SetUnion = expr.extract()?;
+                let expr = SetExpression::from(expr);
+                Self::set_effect(var.id(), expr, &mut self.0.effect.set_resource_effects);
             }
             VarUnion::Int(var) => {
                 let var = IntegerVariable::from(var);
@@ -396,6 +412,11 @@ impl TransitionPy {
                 let expr: SetUnion = expr.extract()?;
                 self.0
                     .add_effect(SetVariable::from(var), SetExpression::from(expr))
+            }
+            VarUnion::SetResource(var) => {
+                let expr: SetUnion = expr.extract()?;
+                self.0
+                    .add_effect(SetResourceVariable::from(var), SetExpression::from(expr))
             }
             VarUnion::Int(var) => {
                 let expr: IntUnion = expr.extract()?;

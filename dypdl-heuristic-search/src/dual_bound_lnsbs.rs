@@ -2,9 +2,9 @@ use crate::search_algorithm::data_structure::HashableSignatureVariables;
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{shared_beam_search, SendableCostNode, SendableFNode};
-use super::search_algorithm::{rollout, Cabs, CabsParameters, Lnbs,
-    LnbsParameters, NeighborhoodSearchInput, Search, SearchInput, StateInRegistry,
-    SuccessorGenerator, TransitionMutex, TransitionWithId,
+use super::search_algorithm::{
+    rollout, Cabs, CabsParameters, Lnbs, LnbsParameters, NeighborhoodSearchInput, Search,
+    SearchInput, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use super::Solution;
 use dypdl::variable_type;
@@ -255,12 +255,11 @@ where
         let node_generator =
             move |state, cost| Some(SendableCostNode::generate_root_node(state, cost, &g_model));
         let t_model = model.clone();
-        let transition_evaluator = move |node: &SendableCostNode<_, _>,
-                                         transition,
-                                         cache: &mut ParentAndChildStateFunctionCache,
-                                         _| {
-            node.generate_successor_node(transition, cache, &t_model)
-        };
+        let transition_evaluator =
+            move |node: &SendableCostNode<_, _>,
+                  transition,
+                  cache: &mut ParentAndChildStateFunctionCache,
+                  _| { node.generate_successor_node(transition, cache, &t_model) };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             shared_beam_search(
                 input,

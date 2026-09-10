@@ -1,4 +1,5 @@
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use crate::state::StateInterface;
@@ -36,59 +37,132 @@ impl SetCondition {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> bool {
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    pub fn eval_with_local_environment<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::IsIn(element, SetExpression::Reference(set)) => {
-                let element = element.eval(state, function_cache, state_functions, registry);
-                let set = set.eval(state, function_cache, state_functions, registry);
+                let element = element.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = set.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.contains(element)
             }
             Self::IsIn(element, SetExpression::StateFunction(i)) => {
-                let element = element.eval(state, function_cache, state_functions, registry);
-                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                let element = element.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let set = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.contains(element)
             }
             Self::IsIn(e, s) => s
-                .eval(state, function_cache, state_functions, registry)
-                .contains(e.eval(state, function_cache, state_functions, registry)),
+                .eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
+                .contains(e.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )),
             Self::IsEqual(x, y) => Self::evaluate_set_comparison(
-                x,
-                y,
+                (x, y),
                 |x, y| x == y,
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
             ),
             Self::IsNotEqual(x, y) => Self::evaluate_set_comparison(
-                x,
-                y,
+                (x, y),
                 |x, y| x != y,
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
             ),
             Self::IsSubset(x, y) => Self::evaluate_set_comparison(
-                x,
-                y,
+                (x, y),
                 |x, y| x.is_subset(y),
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
             ),
             Self::IsEmpty(SetExpression::Reference(set)) => {
-                let set = set.eval(state, function_cache, state_functions, registry);
+                let set = set.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) == 0
             }
             Self::IsEmpty(SetExpression::StateFunction(i)) => {
-                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                let set = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) == 0
             }
             Self::IsEmpty(s) => {
-                s.eval(state, function_cache, state_functions, registry)
-                    .count_ones(..)
+                s.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
+                .count_ones(..)
                     == 0
             }
         }
@@ -119,6 +193,10 @@ impl SetCondition {
                     SetExpression::Reference(ReferenceExpression::Variable(x)),
                     SetExpression::Reference(ReferenceExpression::Variable(y)),
                 )
+                | (
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(x)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(y)),
+                )
                 | (SetExpression::StateFunction(x), SetExpression::StateFunction(y))
                     if x == y =>
                 {
@@ -135,6 +213,10 @@ impl SetCondition {
                     SetExpression::Reference(ReferenceExpression::Variable(x)),
                     SetExpression::Reference(ReferenceExpression::Variable(y)),
                 )
+                | (
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(x)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(y)),
+                )
                 | (SetExpression::StateFunction(x), SetExpression::StateFunction(y))
                     if x == y =>
                 {
@@ -150,6 +232,10 @@ impl SetCondition {
                 (
                     SetExpression::Reference(ReferenceExpression::Variable(x)),
                     SetExpression::Reference(ReferenceExpression::Variable(y)),
+                )
+                | (
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(x)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(y)),
                 )
                 | (SetExpression::StateFunction(x), SetExpression::StateFunction(y))
                     if x == y =>
@@ -169,11 +255,11 @@ impl SetCondition {
     }
 
     fn evaluate_set_comparison<T, F>(
-        x: &SetExpression,
-        y: &SetExpression,
+        pair: (&SetExpression, &SetExpression),
         f: F,
         state: &T,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> bool
@@ -181,50 +267,152 @@ impl SetCondition {
         T: StateInterface,
         F: Fn(&Set, &Set) -> bool,
     {
-        match (x, y) {
+        match pair {
             (SetExpression::StateFunction(i), SetExpression::StateFunction(j)) => {
-                let (x, y) =
-                    function_cache.get_set_value_pair(*i, *j, state, state_functions, registry);
+                let (x, y) = function_cache.get_set_value_pair(
+                    *i,
+                    *j,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, y)
             }
             (SetExpression::StateFunction(i), SetExpression::Reference(y)) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
-                let x = function_cache.get_set_value(*i, state, state_functions, registry);
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let x = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, y)
             }
             (SetExpression::Reference(x), SetExpression::StateFunction(i)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = function_cache.get_set_value(*i, state, state_functions, registry);
+                let x = x.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, y)
             }
             (SetExpression::StateFunction(i), y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
-                let x = function_cache.get_set_value(*i, state, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let x = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, &y)
             }
             (x, SetExpression::StateFunction(i)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = function_cache.get_set_value(*i, state, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(&x, y)
             }
             (SetExpression::Reference(x), SetExpression::Reference(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let x = x.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, y)
             }
             (SetExpression::Reference(x), y) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let x = x.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(x, &y)
             }
             (x, SetExpression::Reference(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 f(&x, y)
             }
             (x, y) => f(
-                &x.eval(state, function_cache, state_functions, registry),
-                &y.eval(state, function_cache, state_functions, registry),
+                &x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                &y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
         }
     }
@@ -2141,6 +2329,18 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(1)),
         );
         assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+        );
+        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
@@ -2228,6 +2428,21 @@ mod tests {
         let expression = SetCondition::IsNotEqual(
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetCondition::Constant(false)
+        );
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }

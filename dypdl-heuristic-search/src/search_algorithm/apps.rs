@@ -1,7 +1,6 @@
 use super::acps::ProgressiveSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, StateRegistry, SuccessorGenerator,
-    TransitionWithId,
+    exceed_bound, BfsNode, StateRegistry, SuccessorGenerator, TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};

@@ -33,6 +33,10 @@ tables:
     type: continuous
     args:
       - item
+state_functions:
+  - name: all_unavailable
+    type: bool
+    expression: (all x unpacked (> (weight x) remaining))
 transitions:
   - name: pack
     parameters:
@@ -56,10 +60,7 @@ transitions:
         object: unpacked
     preconditions:
       - (>= i number_of_bins)
-      - forall:
-          - name: j
-            object: unpacked
-        condition: (> (weight j) remaining)
+      - all_unavailable
     forced: true
 base_cases:
   - - (is_empty unpacked)

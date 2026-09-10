@@ -454,6 +454,23 @@ When the current location is not the depot, i.e., :code:`location != 0`, :math:`
 
 We repeat a similar procedure for the other dual bound.
 
+Another approach to define a dual bound for TSPTW is using the minimum spanning tree.
+Consider a complete graph with vertices :math:`U \cup \{ i \}` and edge weights :math:`c_{jk}` for edge :math:`(j, k)`.
+A spanning tree of this graph is a tree that connects all vertices, and the minimum spanning tree (MST) is a spanning tree with the minimum total edge weight.
+The total travel time to visit all customers in :math:`U` from location :math:`i` is at least the total weight of the minimum spanning tree of this graph.
+In addition, we can add the minimum travel time to return to the depot if the current location is not the depot.
+Therefore, we can define the following dual bound using :func:`~didppy.minimum_spanning_tree`:
+
+.. code-block:: python
+
+    model.add_dual_bound(
+        dp.minimum_spanning_tree(unvisited.add(location), travel_time)
+        + (location != 0).if_then_else(min_to[0], 0)
+    )
+
+Computation of the minimum spanning tree is more expensive (:math:`O(n^2 \log n)`) than the previous dual bounds (:math:`O(n)`), but it may provide a tighter bound.
+However, in what follows, we use the previous dual bounds for simplicity.
+
 Note that dual bounds in DyPDL represent the bounds on the value of the problem defined by the given state, so they are state-dependent.
 Dual bounds are not just bounds on the optimal value of the original problem, but they are used in each subproblem.
 

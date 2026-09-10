@@ -62,6 +62,33 @@ pub fn set_variable_to_yaml(state_metadata: &StateMetadata, index: usize) -> Yam
     Yaml::Hash(variable_hash)
 }
 
+pub fn set_resource_variable_to_yaml(state_metadata: &StateMetadata, index: usize) -> Yaml {
+    let mut variable_hash = Hash::new();
+
+    variable_hash.insert(
+        Yaml::from_str("name"),
+        Yaml::String(state_metadata.set_resource_variable_names[index].clone()),
+    );
+    variable_hash.insert(Yaml::from_str("type"), Yaml::from_str("set"));
+    variable_hash.insert(
+        Yaml::from_str("object"),
+        Yaml::String(
+            state_metadata.object_type_names[state_metadata.set_resource_variable_to_object[index]]
+                .clone(),
+        ),
+    );
+    variable_hash.insert(
+        Yaml::from_str("preference"),
+        Yaml::from_str(if state_metadata.set_less_is_better[index] {
+            "less"
+        } else {
+            "greater"
+        }),
+    );
+
+    Yaml::Hash(variable_hash)
+}
+
 pub fn integer_resource_variable_to_yaml(state_metadata: &StateMetadata, index: usize) -> Yaml {
     let mut variable_hash = Hash::new();
 
@@ -149,6 +176,12 @@ mod tests {
         name_to_set_variable.insert("s1".to_string(), 1);
         let set_variable_to_object = vec![0, 0];
 
+        let set_resource_variable_names = vec!["sr0".to_string(), "sr1".to_string()];
+        let mut name_to_set_resource_variable = FxHashMap::default();
+        name_to_set_resource_variable.insert("sr0".to_string(), 0);
+        name_to_set_resource_variable.insert("sr1".to_string(), 1);
+        let set_resource_variable_to_object = vec![0, 0];
+
         let element_variable_names = vec!["e0".to_string(), "e1".to_string()];
         let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert("e0".to_string(), 0);
@@ -188,6 +221,10 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
+            set_resource_variable_names,
+            name_to_set_resource_variable,
+            set_resource_variable_to_object,
+            set_less_is_better: vec![false, true],
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -205,6 +242,7 @@ mod tests {
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
             continuous_less_is_better: vec![false, true],
+            ..Default::default()
         }
     }
 
@@ -247,6 +285,18 @@ mod tests {
         expected_hash.insert(Yaml::from_str("name"), Yaml::from_str("s1"));
         expected_hash.insert(Yaml::from_str("type"), Yaml::from_str("set"));
         expected_hash.insert(Yaml::from_str("object"), Yaml::from_str("object"));
+        assert_eq!(result, Yaml::Hash(expected_hash));
+    }
+
+    #[test]
+    fn set_resource_variable_to_yaml_ok() {
+        let metadata: StateMetadata = generate_metadata();
+        let result = set_resource_variable_to_yaml(&metadata, 1);
+        let mut expected_hash = Hash::new();
+        expected_hash.insert(Yaml::from_str("name"), Yaml::from_str("sr1"));
+        expected_hash.insert(Yaml::from_str("type"), Yaml::from_str("set"));
+        expected_hash.insert(Yaml::from_str("object"), Yaml::from_str("object"));
+        expected_hash.insert(Yaml::from_str("preference"), Yaml::from_str("less"));
         assert_eq!(result, Yaml::Hash(expected_hash));
     }
 

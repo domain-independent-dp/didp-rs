@@ -1,3 +1,4 @@
+use super::local_environment::LocalEnvironment;
 use super::table_expression::TableExpression;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
@@ -12,6 +13,8 @@ pub enum ReferenceExpression<T: Clone> {
     Constant(T),
     /// Variable index.
     Variable(usize),
+    /// Resource variable index.
+    ResourceVariable(usize),
     /// Constant in a table.
     Table(TableExpression<T>),
 }
@@ -47,15 +50,18 @@ impl ReferenceExpression<Set> {
         &'a self,
         state: &'a S,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &'a TableRegistry,
     ) -> &'a Set {
         match self {
             Self::Constant(value) => value,
             Self::Variable(i) => state.get_set_variable(*i),
+            Self::ResourceVariable(i) => state.get_set_resource_variable(*i),
             Self::Table(table) => table.eval(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
                 &registry.set_tables,
@@ -102,7 +108,15 @@ mod tests {
                 }],
                 ..Default::default()
             },
-            ..Default::default()
+            resource_variables: ResourceVariables {
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                }],
+                ..Default::default()
+            },
         }
     }
 
@@ -111,6 +125,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = generate_registry();
         let expression = ReferenceExpression::Constant({
             let mut set = Set::with_capacity(3);
@@ -123,6 +138,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
             ),
@@ -135,6 +151,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = generate_registry();
         let expression = ReferenceExpression::Variable(0);
         let mut expected = Set::with_capacity(3);
@@ -144,6 +161,30 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry,
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn resource_variable_eval() {
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
+        let registry = generate_registry();
+        let expression = ReferenceExpression::ResourceVariable(0);
+        let mut expected = Set::with_capacity(3);
+        expected.insert(1);
+        expected.insert(2);
+        assert_eq!(
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
             ),
@@ -156,6 +197,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = generate_registry();
         let expression =
             ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Constant(0)));
@@ -166,6 +208,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
             ),
@@ -191,6 +234,16 @@ mod tests {
     fn variable_simplify() {
         let registry = generate_registry();
         let expression = ReferenceExpression::Variable(0);
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn resource_variable_simplify() {
+        let registry = generate_registry();
+        let expression = ReferenceExpression::ResourceVariable(0);
         assert_eq!(
             expression.simplify(&registry, &registry.set_tables),
             expression

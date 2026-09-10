@@ -199,7 +199,7 @@ def test_add_element_resource_var(preference):
     assert model.get_preference(var) == preference
 
 
-@pytest.mark.parametrize("preference,", preference_cases)
+@pytest.mark.parametrize("preference", preference_cases)
 def test_add_element_resource_var_with_name(preference):
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -313,6 +313,132 @@ def test_add_set_var_not_included():
         model.add_set_var(object_type=obj, target={0, 1})
 
 
+@pytest.mark.parametrize("target, expected", set_var_cases)
+def test_add_set_resource_var_default(target, expected):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(object_type=obj, target=target)
+    obj = model.get_object_type_of(var)
+
+    assert model.get_number_of_object(obj) == 4
+    assert model.get_target(var) == expected
+    assert not model.get_preference(var)
+
+
+@pytest.mark.parametrize("preference", preference_cases)
+@pytest.mark.parametrize("target, expected", set_var_cases)
+def test_add_set_resource_var(target, expected, preference):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(
+        object_type=obj, target=target, less_is_better=preference
+    )
+    obj = model.get_object_type_of(var)
+
+    assert model.get_number_of_object(obj) == 4
+    assert model.get_target(var) == expected
+    assert model.get_preference(var) == preference
+
+
+def test_add_set_resource_var_const():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    const = model.create_set_const(object_type=obj, value={0, 1})
+    var = model.add_set_resource_var(
+        object_type=obj, target=const, less_is_better=True
+    )
+    obj = model.get_object_type_of(var)
+
+    assert model.get_number_of_object(obj) == 4
+    assert model.get_target(var) == {0, 1}
+    assert model.get_preference(var)
+
+
+@pytest.mark.parametrize("preference", preference_cases)
+def test_add_set_resource_var_with_name(preference):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    model.add_set_resource_var(
+        object_type=obj, target={0, 1}, less_is_better=preference, name="var"
+    )
+    var = model.get_set_resource_var("var")
+    obj = model.get_object_type_of(var)
+
+    assert model.get_number_of_object(obj) == 4
+    assert model.get_target(var) == {0, 1}
+    assert model.get_preference(var) == preference
+
+
+@pytest.mark.parametrize("target, error", set_var_error_cases)
+def test_add_set_resource_var_error(target, error):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    with pytest.raises(error):
+        model.add_set_resource_var(object_type=obj, target=target)
+
+
+def test_add_set_resource_var_name_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    model.add_set_resource_var(object_type=obj, target={0, 1}, name="var")
+
+    with pytest.raises(RuntimeError):
+        model.add_set_resource_var(object_type=obj, target={0, 1}, name="var")
+
+
+def test_add_set_resource_var_not_included():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_set_resource_var(object_type=obj, target={0, 1})
+
+
+def test_get_set_resource_var_error():
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.get_set_resource_var("var")
+
+
+def test_add_local_var_default_name():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    state = model.target_state
+    x = model.add_local_var()
+
+    assert var.filter(x, x > 1).eval(state, model) == {2, 3}
+
+
+def test_add_local_var_with_name():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    state = model.target_state
+    model.add_local_var("x")
+    x = model.get_local_var("x")
+
+    assert var.filter(x, x > 1).eval(state, model) == {2, 3}
+
+
+def test_add_local_var_name_error():
+    model = dp.Model()
+    model.add_local_var("x")
+
+    with pytest.raises(RuntimeError):
+        model.add_local_var("x")
+
+
+def test_get_local_var_error():
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.get_local_var("x")
+
+
 int_var_cases = [1, -1]
 
 
@@ -373,7 +499,7 @@ def test_add_int_resource_var(preference):
     assert model.get_preference(var) == preference
 
 
-@pytest.mark.parametrize("preference,", preference_cases)
+@pytest.mark.parametrize("preference", preference_cases)
 def test_add_int_resource_var_with_name(preference):
     model = dp.Model()
     model.add_int_resource_var(target=1, name="var", less_is_better=preference)
@@ -470,7 +596,7 @@ def test_add_float_resource_var(preference):
     assert model.get_preference(var) == preference
 
 
-@pytest.mark.parametrize("preference,", preference_cases)
+@pytest.mark.parametrize("preference", preference_cases)
 def test_add_float_resource_var_with_name(preference):
     model = dp.Model()
     model.add_float_resource_var(target=1, name="var", less_is_better=preference)

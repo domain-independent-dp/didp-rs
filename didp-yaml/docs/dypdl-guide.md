@@ -127,9 +127,9 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 `element` is an element variable, whose value is an object having the specified type.
 `integer` and `continuous` are integer and continuous variables.
 
-If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
-The value for `preference`  is either of `less` or `more`.
-Intuitively, with `less`/`more`, if everything else is the same, a state having a smaller/greater value of that variable is better.
+If `type` is `set`, `element`, `integer`, or `continuous`, the key `preference` can be used.
+The value for `preference`  is either of `less` or `greater`.
+Intuitively, with `less`/`greater`, if everything else is the same, a state having a smaller/greater value of that variable is better.
 Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
 
 #### Example
@@ -234,6 +234,8 @@ The type of the expression must match `type`.
 `object` is required, and the value is the name of an object type.
 With `parameters`, for each object or an element in the set variable, one state function is defined.
 The value of the key `name` can be used in the expression defining the state function.
+In expressions, an instantiated parameterized state function is referenced as `(<state function name> <element constant 1> ... <element constant n>)`.
+If the expression itself has parameters, those parameter names can be used as arguments.
 
 ### constraints
 

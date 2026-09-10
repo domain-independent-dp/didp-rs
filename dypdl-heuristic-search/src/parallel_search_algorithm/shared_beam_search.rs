@@ -2,10 +2,12 @@ use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::{TransitionWithId},
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
+    data_structure::TransitionWithId, get_solution_cost_and_suffix, BeamSearchParameters, BfsNode,
+    SearchInput, Solution,
 };
-use dypdl::{variable_type, Model, ParentAndChildStateFunctionCache, ReduceFunction, TransitionInterface};
+use dypdl::{
+    variable_type, Model, ParentAndChildStateFunctionCache, ReduceFunction, TransitionInterface,
+};
 use rayon::prelude::*;
 use std::error::Error;
 use std::fmt::Display;

@@ -5,7 +5,8 @@ use super::super::util::exceed_bound;
 use super::{BfsNode, CostNode};
 use dypdl::variable_type::Numeric;
 use dypdl::{
-    Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, StateInterface, Transition, TransitionInterface,
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, StateInterface,
+    Transition, TransitionInterface,
 };
 use std::cmp::Ordering;
 use std::fmt::Display;

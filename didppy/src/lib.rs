@@ -9,6 +9,7 @@ pub use model::ModelPy;
 #[pymodule]
 fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<model::ObjectTypePy>()?;
+    m.add_class::<model::LocalVarPy>()?;
     m.add_class::<model::ModelPy>()?;
     m.add_class::<model::TransitionPy>()?;
     m.add_class::<model::TransitionIdPy>()?;
@@ -38,6 +39,7 @@ fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<model::ElementResourceVarPy>()?;
     m.add_class::<model::SetExprPy>()?;
     m.add_class::<model::SetVarPy>()?;
+    m.add_class::<model::SetResourceVarPy>()?;
     m.add_class::<model::SetConstPy>()?;
     m.add_class::<model::IntExprPy>()?;
     m.add_class::<model::IntVarPy>()?;
@@ -51,6 +53,8 @@ fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(model::float, &m)?)?;
     m.add_function(wrap_pyfunction!(model::max, &m)?)?;
     m.add_function(wrap_pyfunction!(model::min, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::fractional_knapsack, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::minimum_spanning_tree, &m)?)?;
     m.add_class::<heuristic_search_solver::SolutionPy>()?;
     m.add_class::<heuristic_search_solver::FOperator>()?;
     m.add_class::<heuristic_search_solver::CaasdyPy>()?;
@@ -67,6 +71,7 @@ fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<heuristic_search_solver::WeightedAstarPy>()?;
     m.add_class::<heuristic_search_solver::LnbsPy>()?;
     m.add_class::<heuristic_search_solver::DdLnsPy>()?;
+    m.add_class::<heuristic_search_solver::LabelingPy>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

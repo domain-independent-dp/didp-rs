@@ -1,3 +1,4 @@
+use super::algorithms;
 use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::continuous_expression::ContinuousExpression;
@@ -8,7 +9,12 @@ use super::numeric_operator::{
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use crate::state::{IntegerResourceVariable, IntegerVariable, SetVariable, StateInterface};
+use super::substitute_local_variable::SubstituteLocalVariable;
+use super::LocalEnvironment;
+use crate::local_variable::LocalVariable;
+use crate::state::{
+    IntegerResourceVariable, IntegerVariable, SetResourceVariable, SetVariable, StateInterface,
+};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
@@ -41,6 +47,21 @@ pub enum IntegerExpression {
     Cardinality(SetExpression),
     /// A constant in an integer table.
     Table(Box<NumericTableExpression<Integer>>),
+    /// The minimum spanning tree cost over a set expression using a 2D integer table as edge costs.
+    MinimumSpanningTree(Box<SetExpression>, usize),
+    /// The minimum spanning tree cost over a set expression using a 2D integer table as edge costs and a 2D boolean table as edge connectivity.
+    MinimumSpanningTreeWithConnectivity(Box<SetExpression>, usize, usize),
+    /// The minimum spanning tree cost over a set expression using an explicit list of edges,
+    /// each given as a node pair and a cost expression.
+    MinimumSpanningTreeWithEdges(Box<SetExpression>, Vec<(usize, usize, IntegerExpression)>),
+    /// The minimum spanning tree cost over a set expression using an explicit list of edges,
+    /// each given as a node pair, a cost expression, and a condition for the edge to be present.
+    MinimumSpanningTreeWithEdgesAndConnectivity(
+        Box<SetExpression>,
+        Vec<(usize, usize, IntegerExpression, Condition)>,
+    ),
+    /// The minimum spanning tree cost over a set expression using pre-sorted edge costs.
+    MinimumSpanningTreeWithSortedEdges(Box<SetExpression>, Vec<(usize, usize, Integer)>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
     If(
         Box<Condition>,
@@ -49,6 +70,23 @@ pub enum IntegerExpression {
     ),
     /// Conversion from a continuous expression.
     FromContinuous(CastOperator, Box<ContinuousExpression>),
+    /// Reduce operation over a set expression.
+    Reduce(
+        ReduceOperator,
+        Box<SetExpression>,
+        usize,
+        Box<IntegerExpression>,
+    ),
+    /// Reduce operation over a set expression filtered with a condition.
+    #[doc(hidden)]
+    FilterReduce(
+        ReduceOperator,
+        Box<SetExpression>,
+        usize,
+        usize,
+        Box<Condition>,
+        Box<IntegerExpression>,
+    ),
 }
 
 impl Default for IntegerExpression {
@@ -373,6 +411,138 @@ impl SetExpression {
     pub fn len(self) -> IntegerExpression {
         IntegerExpression::Cardinality(self)
     }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.sum(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        IntegerExpression::Reduce(ReduceOperator::Sum, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.product(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        IntegerExpression::Reduce(ReduceOperator::Product, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.max(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        IntegerExpression::Reduce(ReduceOperator::Max, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let set = SetExpression::from(set);
+    /// let expression = set.min(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        IntegerExpression::Reduce(ReduceOperator::Min, Box::new(self), x.id(), Box::new(f))
+    }
 }
 
 impl SetVariable {
@@ -402,6 +572,300 @@ impl SetVariable {
     #[inline]
     pub fn len(self) -> IntegerExpression {
         IntegerExpression::Cardinality(SetExpression::from(self))
+    }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.sum(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum(self, x: LocalVariable, g: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).sum(x, g)
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.product(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).product(x, f)
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.max(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).max(x, f)
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.min(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).min(x, f)
+    }
+}
+
+impl SetResourceVariable {
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, false, set).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.len();
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
+    /// ```
+    #[inline]
+    pub fn len(self) -> IntegerExpression {
+        IntegerExpression::Cardinality(SetExpression::from(self))
+    }
+
+    /// Returns an expression representing the sum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.sum(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     13,
+    /// );
+    /// ```
+    #[inline]
+    pub fn sum(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).sum(x, f)
+    }
+
+    /// Returns an expression representing the product over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.product(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     36,
+    /// );
+    /// ```
+    #[inline]
+    pub fn product(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).product(x, f)
+    }
+
+    /// Returns an expression representing the maximum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.max(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9,
+    /// );
+    /// ```
+    #[inline]
+    pub fn max(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).max(x, f)
+    }
+
+    /// Returns an expression representing the minimum over a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, true, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = variable.min(
+    ///     x,
+    ///     Table1DHandle::<Integer>::element(&table, x) * Table1DHandle::<Integer>::element(&table, x),
+    /// );
+    ///
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4,
+    /// );
+    /// ```
+    #[inline]
+    pub fn min(self, x: LocalVariable, f: IntegerExpression) -> IntegerExpression {
+        SetExpression::from(self).min(x, f)
     }
 }
 
@@ -614,6 +1078,47 @@ impl Table2DHandle<Integer> {
             ElementExpression::from(x),
             ElementExpression::from(y),
         )))
+    }
+
+    /// Returns the cost of the minimum spanning tree over a set expression.
+    ///
+    /// The 2D table is interpreted as the complete graph edge-cost matrix.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d(
+    ///     "table",
+    ///     vec![
+    ///         vec![0, 1, 4, 3],
+    ///         vec![1, 0, 2, 5],
+    ///         vec![4, 2, 0, 6],
+    ///         vec![3, 5, 6, 0],
+    ///     ],
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let expression = table.minimum_spanning_tree(variable);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
+    /// ```
+    #[inline]
+    pub fn minimum_spanning_tree<T>(&self, nodes: T) -> IntegerExpression
+    where
+        SetExpression: From<T>,
+    {
+        IntegerExpression::MinimumSpanningTree(Box::new(SetExpression::from(nodes)), self.id())
     }
 
     /// Returns the sum of constants over a set expression in a 2D integer table.
@@ -1776,7 +2281,9 @@ impl IntegerExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used, a min/max reduce operation is
+    /// performed on an empty set, or a minimum spanning tree expression is evaluated on a
+    /// disconnected graph.
     ///
     /// # Examples
     ///
@@ -1804,14 +2311,42 @@ impl IntegerExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Integer {
-        self.eval_inner(None, state, function_cache, state_functions, registry)
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    #[inline]
+    pub fn eval_with_local_environment<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Integer {
+        self.eval_inner(
+            None,
+            state,
+            function_cache,
+            local_environment,
+            state_functions,
+            registry,
+        )
     }
 
     /// Returns the evaluation result of a cost expression.
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or a minimum spanning
+    /// tree expression is evaluated on a disconnected graph.
     ///
     /// # Examples
     ///
@@ -1839,7 +2374,36 @@ impl IntegerExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Integer {
-        self.eval_inner(Some(cost), state, function_cache, state_functions, registry)
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_cost_with_local_environment(
+            cost,
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    #[inline]
+    pub fn eval_cost_with_local_environment<U: StateInterface>(
+        &self,
+        cost: Integer,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Integer {
+        self.eval_inner(
+            Some(cost),
+            state,
+            function_cache,
+            local_environment,
+            state_functions,
+            registry,
+        )
     }
 
     fn eval_inner<U: StateInterface>(
@@ -1847,6 +2411,7 @@ impl IntegerExpression {
         cost: Option<Integer>,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Integer {
@@ -1854,54 +2419,386 @@ impl IntegerExpression {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_integer_variable(*i),
             Self::ResourceVariable(i) => state.get_integer_resource_variable(*i),
-            Self::StateFunction(i) => {
-                function_cache.get_integer_value(*i, state, state_functions, registry)
-            }
+            Self::StateFunction(i) => function_cache.get_integer_value(
+                *i,
+                state,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::Cost => cost.unwrap(),
-            Self::UnaryOperation(op, x) => {
-                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
-            }
+            Self::UnaryOperation(op, x) => op.eval(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
             Self::BinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
-                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
+                let a = a.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let b = b.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
-                let set = expression.eval(state, function_cache, state_functions, registry);
+                let set = expression.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) as Integer
             }
             Self::Cardinality(SetExpression::StateFunction(i)) => {
-                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                let set = function_cache.get_set_value(
+                    *i,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.count_ones(..) as Integer
             }
             Self::Cardinality(set) => set
-                .eval(state, function_cache, state_functions, registry)
+                .eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
                 .count_ones(..) as Integer,
             Self::Table(t) => t.eval(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
                 &registry.integer_tables,
             ),
+            Self::MinimumSpanningTree(set, table) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let table = &registry.integer_tables.tables_2d[*table];
+
+                algorithms::compute_minimum_spanning_tree_with_connectivity(
+                    set,
+                    |i, j| table.eval(i, j),
+                    |_, _| true,
+                    |weight| weight,
+                )
+            }
+            Self::MinimumSpanningTreeWithConnectivity(set, table, connectivity_table) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let table = &registry.integer_tables.tables_2d[*table];
+                let connectivity_table = &registry.bool_tables.tables_2d[*connectivity_table];
+
+                algorithms::compute_minimum_spanning_tree_with_connectivity(
+                    set,
+                    |i, j| table.eval(i, j),
+                    |i, j| connectivity_table.eval(i, j),
+                    |weight| weight,
+                )
+            }
+            Self::MinimumSpanningTreeWithEdges(set, edges) => {
+                let set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let edges = edges.iter().map(|(i, j, weight)| {
+                    (
+                        *i,
+                        *j,
+                        weight.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        ),
+                    )
+                });
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    &set,
+                    algorithms::sort_minimum_spanning_tree_edges(edges, |weight| weight),
+                )
+            }
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(set, edges) => {
+                let set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+
+                let edges = edges.iter().filter_map(|(i, j, weight, condition)| {
+                    condition
+                        .eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                        .then(|| {
+                            (
+                                *i,
+                                *j,
+                                weight.eval_inner(
+                                    cost,
+                                    state,
+                                    function_cache,
+                                    local_environment,
+                                    state_functions,
+                                    registry,
+                                ),
+                            )
+                        })
+                });
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    &set,
+                    algorithms::sort_minimum_spanning_tree_edges(edges, |weight| weight),
+                )
+            }
+            Self::MinimumSpanningTreeWithSortedEdges(set, sorted_edges) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    SetExpression::StateFunction(i) => function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+
+                algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                    set,
+                    sorted_edges.iter().copied(),
+                )
+            }
             Self::If(condition, x, y) => {
-                if condition.eval(state, function_cache, state_functions, registry) {
-                    x.eval_inner(cost, state, function_cache, state_functions, registry)
+                if condition.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) {
+                    x.eval_inner(
+                        cost,
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 } else {
-                    y.eval_inner(cost, state, function_cache, state_functions, registry)
+                    y.eval_inner(
+                        cost,
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 }
             }
             Self::FromContinuous(op, x) => op.eval(if let Some(cost) = cost {
-                x.eval_cost(
+                x.eval_cost_with_local_environment(
                     Continuous::from(cost),
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 )
             } else {
-                x.eval(state, function_cache, state_functions, registry)
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
             }) as Integer,
+            Self::Reduce(op, set, id, expression) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let before = local_environment.get(*id);
+                let result = op
+                    .eval_iter(set.ones().map(|e| {
+                        local_environment.set(*id, e);
+
+                        expression.eval_inner(
+                            cost,
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                    }))
+                    .expect("`max`/`min` reduce performed on an empty set");
+
+                if let Some(before) = before {
+                    local_environment.set(*id, before);
+                } else {
+                    local_environment.unset(*id);
+                }
+
+                result
+            }
+            Self::FilterReduce(op, set, filter_id, id, condition, expression) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(expression) => expression.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let filter_before = local_environment.get(*filter_id);
+                let reduce_before = local_environment.get(*id);
+                let result = op
+                    .eval_iter(set.ones().filter_map(|e| {
+                        local_environment.set(*filter_id, e);
+                        let passes = condition.eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        );
+                        if let Some(before) = filter_before {
+                            local_environment.set(*filter_id, before);
+                        } else {
+                            local_environment.unset(*filter_id);
+                        }
+
+                        passes.then(|| {
+                            local_environment.set(*id, e);
+                            let result = expression.eval_inner(
+                                cost,
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            );
+                            if let Some(before) = reduce_before {
+                                local_environment.set(*id, before);
+                            } else {
+                                local_environment.unset(*id);
+                            }
+                            result
+                        })
+                    }))
+                    .expect("`max`/`min` reduce performed on an empty filtered set");
+
+                result
+            }
         }
     }
 
@@ -1909,7 +2806,8 @@ impl IntegerExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or a constant minimum
+    /// spanning tree expression contains a disconnected graph.
     pub fn simplify(&self, registry: &TableRegistry) -> IntegerExpression {
         match self {
             Self::UnaryOperation(op, x) => match x.simplify(registry) {
@@ -1932,6 +2830,151 @@ impl IntegerExpression {
                     expression => Self::Table(Box::new(expression)),
                 }
             }
+            Self::MinimumSpanningTree(set, table) => {
+                let set = set.simplify(registry);
+                let table =
+                    registry.integer_tables.tables_2d.get(*table).expect(
+                        "minimum spanning tree edge-weight table is not in the table registry",
+                    );
+                let sorted_edges = algorithms::sort_minimum_spanning_tree_edges_with_connectivity(
+                    &table.0,
+                    |_, _| true,
+                    |weight| weight,
+                );
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges,
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges)
+            }
+            Self::MinimumSpanningTreeWithConnectivity(set, table, connectivity_table) => {
+                let set = set.simplify(registry);
+                let table =
+                    registry.integer_tables.tables_2d.get(*table).expect(
+                        "minimum spanning tree edge-weight table is not in the table registry",
+                    );
+                let connectivity_table = registry
+                    .bool_tables
+                    .tables_2d
+                    .get(*connectivity_table)
+                    .expect(
+                        "minimum spanning tree connectivity table is not in the table registry",
+                    );
+                let sorted_edges = algorithms::sort_minimum_spanning_tree_edges_with_connectivity(
+                    &table.0,
+                    |i, j| connectivity_table.0[i][j],
+                    |weight| weight,
+                );
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges,
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges)
+            }
+            Self::MinimumSpanningTreeWithEdges(set, edges) => {
+                let set = set.simplify(registry);
+                let edges = edges
+                    .iter()
+                    .map(|(i, j, weight)| (*i, *j, weight.simplify(registry)))
+                    .collect::<Vec<_>>();
+                let constant_edges = edges
+                    .iter()
+                    .map(|(i, j, weight)| match weight {
+                        Self::Constant(value) => Some((*i, *j, *value)),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(constant_edges) = constant_edges {
+                    let sorted_edges =
+                        algorithms::sort_minimum_spanning_tree_edges(constant_edges, |weight| {
+                            weight
+                        });
+
+                    if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                        return Self::Constant(
+                            algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                                set,
+                                sorted_edges,
+                            ),
+                        );
+                    }
+
+                    return Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges);
+                }
+
+                Self::MinimumSpanningTreeWithEdges(Box::new(set), edges)
+            }
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(set, edges) => {
+                let set = set.simplify(registry);
+                let edges = edges
+                    .iter()
+                    .map(|(i, j, weight, condition)| {
+                        (
+                            *i,
+                            *j,
+                            weight.simplify(registry),
+                            condition.simplify(registry),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let constant_edges = edges
+                    .iter()
+                    .map(|(i, j, weight, condition)| match (weight, condition) {
+                        (_, Condition::Constant(false)) => Some(None),
+                        (Self::Constant(value), Condition::Constant(true)) => {
+                            Some(Some((*i, *j, *value)))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(edges) = constant_edges {
+                    let sorted_edges = algorithms::sort_minimum_spanning_tree_edges(
+                        edges.into_iter().flatten(),
+                        |weight| weight,
+                    );
+
+                    if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                        return Self::Constant(
+                            algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                                set,
+                                sorted_edges,
+                            ),
+                        );
+                    }
+
+                    return Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges);
+                }
+
+                Self::MinimumSpanningTreeWithEdgesAndConnectivity(Box::new(set), edges)
+            }
+            Self::MinimumSpanningTreeWithSortedEdges(set, sorted_edges) => {
+                let set = set.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    return Self::Constant(
+                        algorithms::compute_minimum_spanning_tree_from_sorted_edges(
+                            set,
+                            sorted_edges.iter().copied(),
+                        ),
+                    );
+                }
+
+                Self::MinimumSpanningTreeWithSortedEdges(Box::new(set), sorted_edges.clone())
+            }
             Self::If(condition, x, y) => match condition.simplify(registry) {
                 Condition::Constant(true) => x.simplify(registry),
                 Condition::Constant(false) => y.simplify(registry),
@@ -1945,6 +2988,105 @@ impl IntegerExpression {
                 ContinuousExpression::Constant(x) => Self::Constant(op.eval(x) as Integer),
                 x => Self::FromContinuous(op.clone(), Box::new(x)),
             },
+            Self::Reduce(op, set, id, expression) => {
+                let set = set.simplify(registry);
+                let expression = expression.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    let values = set
+                        .ones()
+                        .map(|element| {
+                            match expression
+                                .substitute_local_variable(*id, element)
+                                .simplify(registry)
+                            {
+                                Self::Constant(value) => Some(value),
+                                _ => None,
+                            }
+                        })
+                        .collect::<Option<Vec<_>>>();
+                    if let Some(values) = values {
+                        return Self::Constant(
+                            op.eval_iter(values.into_iter())
+                                .expect("`max`/`min` reduce performed on an empty constant set"),
+                        );
+                    }
+                }
+
+                if let SetExpression::Filter(set, filter_id, condition) = set {
+                    return Self::FilterReduce(
+                        op.clone(),
+                        set,
+                        filter_id,
+                        *id,
+                        condition,
+                        Box::new(expression),
+                    );
+                }
+
+                if let Self::Table(table) = &expression {
+                    if let Some(table) = table.reduce(op, &set, *id) {
+                        return Self::Table(Box::new(table));
+                    }
+                }
+
+                Self::Reduce(op.clone(), Box::new(set), *id, Box::new(expression))
+            }
+            Self::FilterReduce(op, set, filter_id, id, condition, expression) => {
+                let set = set.simplify(registry);
+                let expression = expression.simplify(registry);
+                let condition = condition.simplify(registry);
+
+                if let SetExpression::Reference(ReferenceExpression::Constant(set)) = &set {
+                    let mut values = Vec::new();
+                    let mut is_constant = true;
+
+                    for element in set.ones() {
+                        let condition = condition
+                            .substitute_local_variable(*filter_id, element)
+                            .simplify(registry);
+                        match condition {
+                            Condition::Constant(true) => {
+                                match expression
+                                    .substitute_local_variable(*id, element)
+                                    .simplify(registry)
+                                {
+                                    Self::Constant(value) => values.push(value),
+                                    _ => {
+                                        is_constant = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            Condition::Constant(false) => {}
+                            _ => {
+                                is_constant = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if is_constant {
+                        return Self::Constant(
+                            op.eval_iter(values.into_iter())
+                                .expect("`max`/`min` reduce performed on an empty filtered set"),
+                        );
+                    }
+                }
+
+                match (op, &condition) {
+                    (ReduceOperator::Sum, Condition::Constant(false)) => Self::Constant(0),
+                    (ReduceOperator::Product, Condition::Constant(false)) => Self::Constant(1),
+                    _ => Self::FilterReduce(
+                        op.clone(),
+                        Box::new(set),
+                        *filter_id,
+                        *id,
+                        Box::new(condition),
+                        Box::new(expression),
+                    ),
+                }
+            }
             _ => self.clone(),
         }
     }
@@ -1952,6 +3094,7 @@ impl IntegerExpression {
 
 #[cfg(test)]
 mod tests {
+    use super::super::condition::ComparisonOperator;
     use super::super::table_expression::TableExpression;
     use super::*;
     use crate::state::*;
@@ -3200,6 +4343,51 @@ mod tests {
                 ReferenceExpression::Variable(v.id())
             ))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.len(),
+            IntegerExpression::Cardinality(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(v.id())
+            ))
+        );
+    }
+
+    #[test]
+    fn set_reduce() {
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let value = IntegerExpression::Constant(2);
+
+        assert_eq!(
+            set.clone().sum(x, value.clone()),
+            IntegerExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(set.clone()),
+                x.id(),
+                Box::new(value.clone())
+            )
+        );
+
+        let condition = Condition::comparison_e(ComparisonOperator::Ge, x, 1);
+        assert_eq!(
+            set.clone()
+                .filter(x, condition.clone())
+                .sum(x, value.clone()),
+            IntegerExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(SetExpression::Filter(
+                    Box::new(set),
+                    x.id(),
+                    Box::new(condition),
+                )),
+                x.id(),
+                Box::new(value)
+            )
+        );
     }
 
     #[test]
@@ -3922,6 +5110,154 @@ mod tests {
     }
 
     #[test]
+    fn minimum_spanning_tree_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry {
+            integer_tables: crate::table_data::TableData {
+                tables_2d: vec![crate::table::Table2D::new(vec![
+                    vec![0, 1, 4, 3],
+                    vec![1, 0, 2, 5],
+                    vec![4, 2, 0, 6],
+                    vec![3, 5, 6, 0],
+                ])],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = IntegerExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            0,
+        );
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_sorted_edges_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(3);
+        let expression = IntegerExpression::MinimumSpanningTreeWithSortedEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (0, 1, 1),
+                (1, 2, 2),
+                (0, 3, 3),
+                (0, 2, 4),
+                (1, 3, 5),
+                (2, 3, 6),
+            ],
+        );
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            4
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        // Edges are deliberately given out of weight order to confirm they are sorted before
+        // running Kruskal's algorithm.
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (2, 3, IntegerExpression::Constant(6)),
+                (1, 3, IntegerExpression::Constant(5)),
+                (0, 3, IntegerExpression::Constant(3)),
+                (1, 2, IntegerExpression::Constant(2)),
+                (0, 2, IntegerExpression::Constant(4)),
+                (0, 1, IntegerExpression::Constant(1)),
+            ],
+        );
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_and_connectivity_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        // The cheap edge (0, 1) is not present, so the tree must route through more expensive edges.
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            vec![
+                (
+                    0,
+                    1,
+                    IntegerExpression::Constant(1),
+                    Condition::Constant(false),
+                ),
+                (
+                    0,
+                    2,
+                    IntegerExpression::Constant(4),
+                    Condition::Constant(true),
+                ),
+                (
+                    0,
+                    3,
+                    IntegerExpression::Constant(3),
+                    Condition::Constant(true),
+                ),
+                (
+                    1,
+                    2,
+                    IntegerExpression::Constant(2),
+                    Condition::Constant(true),
+                ),
+                (
+                    1,
+                    3,
+                    IntegerExpression::Constant(5),
+                    Condition::Constant(true),
+                ),
+                (
+                    2,
+                    3,
+                    IntegerExpression::Constant(6),
+                    Condition::Constant(true),
+                ),
+            ],
+        );
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            9
+        );
+    }
+
+    #[test]
     fn if_eval() {
         let state = State::default();
         let state_functions = StateFunctions::default();
@@ -3963,6 +5299,204 @@ mod tests {
         assert_eq!(
             expression.eval(&state, &mut function_cache, &state_functions, &registry),
             1
+        );
+    }
+
+    #[test]
+    fn reduce_eval_restores_local_environment() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let table = registry.add_table_1d("values", vec![10, 20, 30]).unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression =
+            SetExpression::from(set).sum(x, Table1DHandle::<Integer>::element(&table, x));
+        let mut local_environment = LocalEnvironment::default();
+        local_environment.set(x.id(), 1);
+
+        assert_eq!(
+            expression.eval_with_local_environment(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
+            40
+        );
+        assert_eq!(local_environment.get(x.id()), Some(1));
+
+        let mut local_environment = LocalEnvironment::default();
+        let _ = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+        assert_eq!(local_environment.get(x.id()), None);
+    }
+
+    #[test]
+    fn filter_reduce_eval_restores_local_environment() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let y = local_variable_data.add("y").unwrap();
+        let table = registry.add_table_1d("values", vec![10, 20, 30]).unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = IntegerExpression::FilterReduce(
+            ReduceOperator::Sum,
+            Box::new(SetExpression::from(set)),
+            x.id(),
+            y.id(),
+            Box::new(Condition::comparison_e(ComparisonOperator::Ge, x, 1)),
+            Box::new(Table1DHandle::<Integer>::element(&table, y)),
+        );
+        let mut local_environment = LocalEnvironment::default();
+        local_environment.set(x.id(), 0);
+        local_environment.set(y.id(), 2);
+
+        assert_eq!(
+            expression.eval_with_local_environment(
+                &state,
+                &mut function_cache,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
+            50
+        );
+        assert_eq!(local_environment.get(x.id()), Some(0));
+        assert_eq!(local_environment.get(y.id()), Some(2));
+
+        let mut local_environment = LocalEnvironment::default();
+        let _ = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+        assert_eq!(local_environment.get(x.id()), None);
+        assert_eq!(local_environment.get(y.id()), None);
+    }
+
+    #[test]
+    fn reduce_simplify() {
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let y = local_variable_data.add("y").unwrap();
+        let table = registry.add_table_1d("values", vec![1, 2, 3]).unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = SetExpression::from(set.clone()).sum(x, IntegerExpression::Constant(2));
+
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(6)
+        );
+
+        let expression =
+            SetExpression::from(set.clone()).sum(x, Table1DHandle::<Integer>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(6)
+        );
+
+        let expression = SetExpression::from(set).sum(x, IntegerExpression::Variable(0));
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = SetExpression::Reference(ReferenceExpression::Variable(0))
+            .sum(x, IntegerExpression::Variable(0));
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let condition = Condition::comparison_e(ComparisonOperator::Ge, x, 1);
+        let expression = set
+            .clone()
+            .filter(x, condition.clone())
+            .sum(y, Table1DHandle::<Integer>::element(&table, y));
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::FilterReduce(
+                ReduceOperator::Sum,
+                Box::new(set.clone()),
+                x.id(),
+                y.id(),
+                Box::new(condition),
+                Box::new(Table1DHandle::<Integer>::element(&table, y)),
+            )
+        );
+
+        let expression = set
+            .clone()
+            .sum(x, Table1DHandle::<Integer>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Sum,
+                table.id(),
+                set,
+            )))
+        );
+    }
+
+    #[test]
+    fn filter_reduce_simplify() {
+        let mut registry = TableRegistry::default();
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let table = registry.add_table_1d("values", vec![1, 2, 3]).unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(true))
+            .sum(x, IntegerExpression::Constant(2));
+
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(6)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(false))
+            .sum(x, IntegerExpression::Constant(2));
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(0)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::comparison_e(ComparisonOperator::Ge, x, 1))
+            .sum(x, Table1DHandle::<Integer>::element(&table, x));
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(5)
+        );
+
+        let expression = SetExpression::from(set.clone())
+            .filter(x, Condition::Constant(true))
+            .sum(x, IntegerExpression::Variable(0));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::from(set).sum(x, IntegerExpression::Variable(0))
         );
     }
 
@@ -4064,6 +5598,201 @@ mod tests {
             ElementExpression::Variable(0),
         )));
         assert_eq!(expression.simplify(&registry), expression,);
+    }
+
+    #[test]
+    fn minimum_spanning_tree_simplify() {
+        let registry = TableRegistry {
+            integer_tables: crate::table_data::TableData {
+                tables_2d: vec![crate::table::Table2D::new(vec![
+                    vec![0, 1, 4, 3],
+                    vec![1, 0, 2, 5],
+                    vec![4, 2, 0, 6],
+                    vec![3, 5, 6, 0],
+                ])],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = IntegerExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            0,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(6)
+        );
+
+        let expression = IntegerExpression::MinimumSpanningTree(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            0,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![
+                    (0, 1, 1),
+                    (1, 2, 2),
+                    (0, 3, 3),
+                    (0, 2, 4),
+                    (1, 3, 5),
+                    (2, 3, 6),
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_simplify() {
+        let registry = TableRegistry::default();
+        let edges = vec![
+            (0, 2, IntegerExpression::Constant(4)),
+            (1, 2, IntegerExpression::Constant(2)),
+            (0, 1, IntegerExpression::Constant(1)),
+        ];
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges.clone(),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(3)
+        );
+
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            edges,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![(0, 1, 1), (1, 2, 2), (0, 2, 4)]
+            )
+        );
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let edges = vec![
+            (0, 1, IntegerExpression::Variable(0)),
+            (0, 2, IntegerExpression::Constant(4)),
+            (1, 2, IntegerExpression::Constant(2)),
+        ];
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdges(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges,
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn minimum_spanning_tree_with_edges_and_connectivity_simplify() {
+        let registry = TableRegistry::default();
+        let edges = vec![
+            (
+                0,
+                1,
+                IntegerExpression::Constant(1),
+                Condition::Constant(false),
+            ),
+            (
+                0,
+                2,
+                IntegerExpression::Constant(4),
+                Condition::Constant(true),
+            ),
+            (
+                0,
+                3,
+                IntegerExpression::Constant(3),
+                Condition::Constant(true),
+            ),
+            (
+                1,
+                2,
+                IntegerExpression::Constant(2),
+                Condition::Constant(true),
+            ),
+            (
+                1,
+                3,
+                IntegerExpression::Constant(5),
+                Condition::Constant(true),
+            ),
+            (
+                2,
+                3,
+                IntegerExpression::Constant(6),
+                Condition::Constant(true),
+            ),
+        ];
+
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges.clone(),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::Constant(9)
+        );
+
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            edges,
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            IntegerExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                vec![(1, 2, 2), (0, 3, 3), (0, 2, 4), (1, 3, 5), (2, 3, 6)]
+            )
+        );
+
+        let mut set = Set::with_capacity(4);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        set.insert(3);
+        let edges = vec![
+            (
+                0,
+                1,
+                IntegerExpression::Constant(1),
+                Condition::Table(Box::new(TableExpression::Table1D(
+                    0,
+                    ElementExpression::Variable(0),
+                ))),
+            ),
+            (
+                0,
+                2,
+                IntegerExpression::Constant(4),
+                Condition::Constant(true),
+            ),
+        ];
+        let expression = IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            edges,
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]

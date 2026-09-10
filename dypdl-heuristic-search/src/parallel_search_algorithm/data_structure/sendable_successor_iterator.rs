@@ -1,7 +1,5 @@
 use crate::search_algorithm::{
-    data_structure::{
-        HashableSignatureVariables, TransitionWithId
-    },
+    data_structure::{HashableSignatureVariables, TransitionWithId},
     BfsNode, SuccessorGenerator,
 };
 use crate::ConcurrentStateRegistry;

@@ -1,14 +1,19 @@
 use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use super::reference_expression::ReferenceExpression;
 use super::set_reduce_expression::{SetReduceExpression, SetReduceOperator};
+use super::substitute_local_variable::SubstituteLocalVariable;
 use super::table_expression::TableExpression;
-use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
+use crate::state::{
+    ElementResourceVariable, ElementVariable, SetResourceVariable, SetVariable, StateInterface,
+};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
+use crate::LocalVariable;
 use std::ops;
 
 /// Set expression.
@@ -28,6 +33,8 @@ pub enum SetExpression {
     Reduce(SetReduceExpression),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
     If(Box<Condition>, Box<SetExpression>, Box<SetExpression>),
+    /// Filter set elements by a condition.
+    Filter(Box<SetExpression>, usize, Box<Condition>),
 }
 
 /// Operator on an two sets.
@@ -71,6 +78,13 @@ impl From<SetVariable> for SetExpression {
     }
 }
 
+impl From<SetResourceVariable> for SetExpression {
+    #[inline]
+    fn from(v: SetResourceVariable) -> Self {
+        SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id()))
+    }
+}
+
 impl ops::Not for SetExpression {
     type Output = SetExpression;
 
@@ -103,10 +117,8 @@ impl ops::Not for SetExpression {
     }
 }
 
-impl ops::Not for SetVariable {
-    type Output = SetExpression;
-
-    /// Returns an expression representing the complement.
+impl SetExpression {
+    /// Return an expression representing the filtered set by a condition.
     ///
     /// # Examples
     ///
@@ -115,23 +127,24 @@ impl ops::Not for SetVariable {
     ///
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
-    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let x = model.add_local_variable("x").unwrap();
     /// let state = model.target.clone();
     /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
     ///
-    /// let expression = !variable;
+    /// let expression = SetExpression::from(set);
+    /// let expression = expression.filter(x, Condition::comparison_e(ComparisonOperator::Gt, x, 1));
     /// let expected = model.create_set(object_type, &[2, 3]).unwrap();
     /// assert_eq!(
     ///     expression.eval(
-    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///        &state, &mut function_cache, &model.state_functions, &model.table_registry,
     ///     ),
-    ///     expected,
+    ///    expected,
     /// );
     /// ```
     #[inline]
-    fn not(self) -> Self::Output {
-        SetExpression::Complement(Box::new(SetExpression::from(self)))
+    pub fn filter(self, x: LocalVariable, f: Condition) -> SetExpression {
+        SetExpression::Filter(Box::new(self), x.id(), Box::new(f))
     }
 }
 
@@ -1100,6 +1113,27 @@ impl IfThenElse<SetExpression> for Condition {
     }
 }
 
+macro_rules! impl_unary_ops {
+    ($T:ty) => {
+        impl ops::Not for $T {
+            type Output = SetExpression;
+
+            /// Returns an expression representing the complement.
+            #[inline]
+            fn not(self) -> SetExpression {
+                !SetExpression::from(self)
+            }
+        }
+
+        impl $T {
+            #[inline]
+            pub fn filter(self, x: LocalVariable, f: Condition) -> SetExpression {
+                SetExpression::from(self).filter(x, f)
+            }
+        }
+    };
+}
+
 macro_rules! impl_set_ops {
     ($T:ty,$U:ty) => {
         impl ops::BitOr<$U> for $T {
@@ -1160,29 +1194,42 @@ macro_rules! impl_set_element_ops {
 
 impl_set_ops!(SetExpression, Set);
 impl_set_ops!(SetExpression, SetVariable);
+impl_set_ops!(SetExpression, SetResourceVariable);
 impl_set_element_ops!(SetExpression, ElementExpression);
 impl_set_element_ops!(SetExpression, Element);
 impl_set_element_ops!(SetExpression, ElementVariable);
 impl_set_element_ops!(SetExpression, ElementResourceVariable);
 impl_set_ops!(Set, SetExpression);
 impl_set_ops!(Set, SetVariable);
+impl_set_ops!(Set, SetResourceVariable);
 impl_set_element_ops!(Set, ElementExpression);
 impl_set_element_ops!(Set, ElementVariable);
 impl_set_element_ops!(Set, ElementResourceVariable);
+impl_unary_ops!(SetVariable);
 impl_set_ops!(SetVariable, SetExpression);
 impl_set_ops!(SetVariable, Set);
 impl_set_ops!(SetVariable, SetVariable);
+impl_set_ops!(SetVariable, SetResourceVariable);
 impl_set_element_ops!(SetVariable, ElementExpression);
 impl_set_element_ops!(SetVariable, Element);
 impl_set_element_ops!(SetVariable, ElementVariable);
 impl_set_element_ops!(SetVariable, ElementResourceVariable);
+impl_unary_ops!(SetResourceVariable);
+impl_set_ops!(SetResourceVariable, SetExpression);
+impl_set_ops!(SetResourceVariable, Set);
+impl_set_ops!(SetResourceVariable, SetVariable);
+impl_set_ops!(SetResourceVariable, SetResourceVariable);
+impl_set_element_ops!(SetResourceVariable, ElementExpression);
+impl_set_element_ops!(SetResourceVariable, Element);
+impl_set_element_ops!(SetResourceVariable, ElementVariable);
+impl_set_element_ops!(SetResourceVariable, ElementResourceVariable);
 
 impl SetExpression {
     /// Returns the evaluation result.
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -1204,6 +1251,7 @@ impl SetExpression {
     ///     set,
     /// );
     /// ```
+    #[inline]
     pub fn eval<T: StateInterface>(
         &self,
         state: &T,
@@ -1211,61 +1259,225 @@ impl SetExpression {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Set {
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    pub fn eval_with_local_environment<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Set {
         match self {
             Self::Reference(expression) => expression
-                .eval(state, function_cache, state_functions, registry)
+                .eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
                 .clone(),
             Self::StateFunction(i) => function_cache
-                .get_set_value(*i, state, state_functions, registry)
+                .get_set_value(*i, state, local_environment, state_functions, registry)
                 .clone(),
             Self::Complement(set) => {
-                let mut set = set.eval(state, function_cache, state_functions, registry);
+                let mut set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 set.toggle_range(..);
                 set
             }
             Self::SetOperation(op, x, y) => match (op, x.as_ref(), y.as_ref()) {
                 (op, x, SetExpression::Reference(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::eval_set_operation(op, x, y)
                 }
                 (SetOperator::Intersection, SetExpression::Reference(x), y)
                 | (SetOperator::Union, SetExpression::Reference(x), y) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = x.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::eval_set_operation(op, y, x)
                 }
                 (op, x, SetExpression::StateFunction(i)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = function_cache.get_set_value(*i, state, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::eval_set_operation(op, x, y)
                 }
                 (SetOperator::Intersection, SetExpression::StateFunction(i), y)
                 | (SetOperator::Union, SetExpression::StateFunction(i), y) => {
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    let x = function_cache.get_set_value(*i, state, state_functions, registry);
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let x = function_cache.get_set_value(
+                        *i,
+                        state,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::eval_set_operation(op, y, x)
                 }
                 (op, x, y) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
+                    let y = y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    );
                     Self::eval_set_operation(op, x, &y)
                 }
             },
             Self::SetElementOperation(op, element, set) => {
-                let set = set.eval(state, function_cache, state_functions, registry);
-                let element = element.eval(state, function_cache, state_functions, registry);
+                let set = set.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let element = element.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::eval_set_element_operation(op, element, set)
             }
-            Self::Reduce(expression) => {
-                expression.eval(state, function_cache, state_functions, registry)
-            }
+            Self::Reduce(expression) => expression.eval(
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, function_cache, state_functions, registry) {
-                    x.eval(state, function_cache, state_functions, registry)
+                if condition.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) {
+                    x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 } else {
-                    y.eval(state, function_cache, state_functions, registry)
+                    y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                 }
+            }
+            Self::Filter(set, id, condition) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(set) => set.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let before = local_environment.get(*id);
+                let mut filtered = Set::with_capacity(set.len());
+                filtered.extend(set.ones().filter(|&e| {
+                    local_environment.set(*id, e);
+
+                    condition.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
+                }));
+
+                if let Some(before) = before {
+                    local_environment.set(*id, before);
+                } else {
+                    local_environment.unset(*id);
+                }
+
+                filtered
             }
         }
     }
@@ -1274,7 +1486,7 @@ impl SetExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> SetExpression {
         match self {
             Self::Reference(expression) => {
@@ -1307,6 +1519,16 @@ impl SetExpression {
                         Self::Reference(ReferenceExpression::Variable(x)),
                         Self::Reference(ReferenceExpression::Variable(y)),
                     ) if x == y => Self::Reference(ReferenceExpression::Variable(x)),
+                    (
+                        SetOperator::Union,
+                        Self::Reference(ReferenceExpression::ResourceVariable(x)),
+                        Self::Reference(ReferenceExpression::ResourceVariable(y)),
+                    )
+                    | (
+                        SetOperator::Intersection,
+                        Self::Reference(ReferenceExpression::ResourceVariable(x)),
+                        Self::Reference(ReferenceExpression::ResourceVariable(y)),
+                    ) if x == y => Self::Reference(ReferenceExpression::ResourceVariable(x)),
                     (SetOperator::Union, Self::StateFunction(x), Self::StateFunction(y))
                     | (SetOperator::Intersection, Self::StateFunction(x), Self::StateFunction(y))
                         if x == y =>
@@ -1342,6 +1564,63 @@ impl SetExpression {
                     Box::new(y.simplify(registry)),
                 ),
             },
+            Self::Filter(set, id, condition) => {
+                let set = set.simplify(registry);
+                let condition = condition.simplify(registry);
+
+                match (set, condition) {
+                    (set, Condition::Constant(true)) => set,
+                    (
+                        Self::Reference(ReferenceExpression::Constant(set)),
+                        Condition::Constant(false),
+                    ) => Self::Reference(ReferenceExpression::Constant(Set::with_capacity(
+                        set.len(),
+                    ))),
+                    (Self::Reference(ReferenceExpression::Constant(set)), condition) => {
+                        let mut included = Set::with_capacity(set.len());
+                        let mut unresolved = Set::with_capacity(set.len());
+
+                        for element in set.ones() {
+                            match condition
+                                .substitute_local_variable(*id, element)
+                                .simplify(registry)
+                            {
+                                Condition::Constant(true) => {
+                                    included.insert(element);
+                                }
+                                Condition::Constant(false) => {}
+                                _ => {
+                                    unresolved.insert(element);
+                                }
+                            }
+                        }
+
+                        if unresolved.ones().next().is_none() {
+                            Self::Reference(ReferenceExpression::Constant(included))
+                        } else {
+                            let filtered = Self::Filter(
+                                Box::new(Self::Reference(ReferenceExpression::Constant(
+                                    unresolved,
+                                ))),
+                                *id,
+                                Box::new(condition),
+                            );
+                            if included.ones().next().is_none() {
+                                filtered
+                            } else {
+                                Self::SetOperation(
+                                    SetOperator::Union,
+                                    Box::new(Self::Reference(ReferenceExpression::Constant(
+                                        included,
+                                    ))),
+                                    Box::new(filtered),
+                                )
+                            }
+                        }
+                    }
+                    (set, condition) => Self::Filter(Box::new(set), *id, Box::new(condition)),
+                }
+            }
             _ => self.clone(),
         }
     }
@@ -1451,6 +1730,9 @@ mod tests {
         let mut set2 = Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
+        let mut set3 = Set::with_capacity(3);
+        set3.insert(1);
+        set3.insert(2);
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
@@ -1458,6 +1740,7 @@ mod tests {
                 ..Default::default()
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![set3],
                 element_variables: vec![2],
                 ..Default::default()
             },
@@ -1494,6 +1777,14 @@ mod tests {
             SetExpression::from(v),
             SetExpression::Reference(ReferenceExpression::Variable(v.id()))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            SetExpression::from(v),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id()))
+        );
     }
 
     #[test]
@@ -1517,6 +1808,16 @@ mod tests {
             !v,
             SetExpression::Complement(Box::new(SetExpression::Reference(
                 ReferenceExpression::Variable(v.id())
+            )))
+        );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            !v,
+            SetExpression::Complement(Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(v.id())
             )))
         );
     }
@@ -1585,7 +1886,7 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
-                Box::new(expression1),
+                Box::new(expression1.clone()),
             )
         );
 
@@ -1608,7 +1909,79 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+            )
+        );
+
+        let rv = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(rv.is_ok());
+        let rv = rv.unwrap();
+        assert_eq!(
+            expression1.clone() | rv,
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(expression1.clone()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv | expression1.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(expression1.clone()),
+            )
+        );
+        assert_eq!(
+            s.clone() | rv,
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv | s.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
                 Box::new(SetExpression::Reference(ReferenceExpression::Constant(s))),
+            )
+        );
+        assert_eq!(
+            v | rv,
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv | v,
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
             )
         );
     }
@@ -1677,7 +2050,7 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
-                Box::new(expression1),
+                Box::new(expression1.clone()),
             )
         );
 
@@ -1700,7 +2073,79 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+            )
+        );
+
+        let rv = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(rv.is_ok());
+        let rv = rv.unwrap();
+        assert_eq!(
+            expression1.clone() - rv,
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(expression1.clone()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv - expression1.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(expression1.clone()),
+            )
+        );
+        assert_eq!(
+            s.clone() - rv,
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv - s.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
                 Box::new(SetExpression::Reference(ReferenceExpression::Constant(s))),
+            )
+        );
+        assert_eq!(
+            v - rv,
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv - v,
+            SetExpression::SetOperation(
+                SetOperator::Difference,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
             )
         );
     }
@@ -1769,7 +2214,7 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
-                Box::new(expression1),
+                Box::new(expression1.clone()),
             )
         );
 
@@ -1792,7 +2237,79 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     v.id()
                 ))),
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+            )
+        );
+
+        let rv = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(rv.is_ok());
+        let rv = rv.unwrap();
+        assert_eq!(
+            expression1.clone() & rv,
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(expression1.clone()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv & expression1.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(expression1.clone()),
+            )
+        );
+        assert_eq!(
+            s.clone() & rv,
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    s.clone()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv & s.clone(),
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
                 Box::new(SetExpression::Reference(ReferenceExpression::Constant(s))),
+            )
+        );
+        assert_eq!(
+            v & rv,
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            rv & v,
+            SetExpression::SetOperation(
+                SetOperator::Intersection,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(rv.id())
+                )),
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                    v.id()
+                ))),
             )
         );
     }
@@ -1854,7 +2371,7 @@ mod tests {
             sv.add(expression2.clone()),
             SetExpression::SetElementOperation(
                 SetElementOperator::Add,
-                expression2,
+                expression2.clone(),
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     sv.id()
                 ))),
@@ -1888,6 +2405,50 @@ mod tests {
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     sv.id()
                 ))),
+            )
+        );
+
+        let srv = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(srv.is_ok());
+        let srv = srv.unwrap();
+        assert_eq!(
+            srv.add(expression2.clone()),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Add,
+                expression2,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.add(1),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Add,
+                ElementExpression::Constant(1),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.add(ev),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Add,
+                ElementExpression::Variable(ev.id()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.add(erv),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Add,
+                ElementExpression::ResourceVariable(erv.id()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
             )
         );
     }
@@ -1949,7 +2510,7 @@ mod tests {
             sv.remove(expression2.clone()),
             SetExpression::SetElementOperation(
                 SetElementOperator::Remove,
-                expression2,
+                expression2.clone(),
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
                     sv.id()
                 ))),
@@ -1984,6 +2545,63 @@ mod tests {
                     sv.id()
                 ))),
             )
+        );
+
+        let srv = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(srv.is_ok());
+        let srv = srv.unwrap();
+        assert_eq!(
+            srv.remove(expression2.clone()),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Remove,
+                expression2,
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.remove(1),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Remove,
+                ElementExpression::Constant(1),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.remove(ev),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Remove,
+                ElementExpression::Variable(ev.id()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+        assert_eq!(
+            srv.remove(erv),
+            SetExpression::SetElementOperation(
+                SetElementOperator::Remove,
+                ElementExpression::ResourceVariable(erv.id()),
+                Box::new(SetExpression::Reference(
+                    ReferenceExpression::ResourceVariable(srv.id())
+                )),
+            )
+        );
+    }
+
+    #[test]
+    fn set_filter() {
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let condition = Condition::comparison_e(ComparisonOperator::Ge, x, 1);
+
+        assert_eq!(
+            set.clone().filter(x, condition.clone()),
+            SetExpression::Filter(Box::new(set), x.id(), Box::new(condition))
         );
     }
 
@@ -2724,6 +3342,11 @@ mod tests {
             expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
         );
+        let expression = SetExpression::Reference(ReferenceExpression::ResourceVariable(0));
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            state.resource_variables.set_variables[0]
+        );
         let expression = SetExpression::Reference(ReferenceExpression::Table(
             TableExpression::Table1D(0, ElementExpression::Constant(0)),
         ));
@@ -3131,8 +3754,54 @@ mod tests {
         );
     }
 
-    fn generate_set_reduce_registry() -> TableRegistry {
-        TableRegistry {
+    #[test]
+    fn set_filter_eval_restores_local_environment() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_variable_data = crate::LocalVariableData::default();
+        let x = local_variable_data.add("x").unwrap();
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let expression = SetExpression::from(set)
+            .filter(x, Condition::comparison_e(ComparisonOperator::Ge, x, 1));
+        let mut local_environment = LocalEnvironment::default();
+        local_environment.set(x.id(), 7);
+
+        let result = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(1);
+        expected.insert(2);
+        assert_eq!(result, expected);
+        assert_eq!(local_environment.get(x.id()), Some(7));
+
+        let mut local_environment = LocalEnvironment::default();
+        let _ = expression.eval_with_local_environment(
+            &state,
+            &mut function_cache,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
+        assert_eq!(local_environment.get(x.id()), None);
+    }
+
+    #[test]
+    fn set_reduce_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry {
             set_tables: TableData {
                 tables: vec![Table::new(
                     {
@@ -3167,15 +3836,7 @@ mod tests {
                 ..Default::default()
             },
             ..Default::default()
-        }
-    }
-
-    #[test]
-    fn set_reduce_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = generate_set_reduce_registry();
+        };
         let expression = SetExpression::Reduce(SetReduceExpression::Table(
             SetReduceOperator::Union,
             5,
@@ -3208,106 +3869,6 @@ mod tests {
                 set.insert(4);
                 set
             }
-        );
-    }
-
-    #[test]
-    fn set_reduce_constant_simplify() {
-        let registry = generate_set_reduce_registry();
-        let expression = SetExpression::Reduce(SetReduceExpression::Table(
-            SetReduceOperator::Union,
-            5,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-            ],
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }))
-        );
-    }
-
-    #[test]
-    fn set_reduce_simplify() {
-        let registry = generate_set_reduce_registry();
-        let expression = SetExpression::Reduce(SetReduceExpression::Table(
-            SetReduceOperator::Union,
-            5,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::If(
-                    Box::new(Condition::Constant(true)),
-                    Box::new(ElementExpression::Variable(0)),
-                    Box::new(ElementExpression::Constant(0)),
-                )),
-                ArgumentExpression::Element(ElementExpression::If(
-                    Box::new(Condition::Constant(true)),
-                    Box::new(ElementExpression::Variable(0)),
-                    Box::new(ElementExpression::Constant(0)),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-            ],
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            SetExpression::Reduce(SetReduceExpression::Table(
-                SetReduceOperator::Union,
-                5,
-                0,
-                vec![
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Constant({
-                            let mut set = Set::with_capacity(2);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        })
-                    )),
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Constant({
-                            let mut set = Set::with_capacity(2);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        })
-                    )),
-                ],
-            ))
         );
     }
 
@@ -3395,6 +3956,19 @@ mod tests {
             expression.simplify(&registry),
             SetExpression::Reference(ReferenceExpression::Variable(0))
         );
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0))
+        );
     }
 
     #[test]
@@ -3460,6 +4034,19 @@ mod tests {
             expression.simplify(&registry),
             SetExpression::Reference(ReferenceExpression::Variable(0))
         );
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0))
+        );
     }
 
     #[test]
@@ -3515,6 +4102,176 @@ mod tests {
     }
 
     #[test]
+    fn set_reduce_constant_simplify() {
+        let registry = TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(5);
+                set.insert(0);
+                set.insert(1);
+                set.insert(2);
+                set.insert(3);
+                set.insert(4);
+                set
+            }))
+        );
+    }
+
+    #[test]
+    fn set_reduce_simplify() {
+        let registry = TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                5,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
+                    )),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
+                    )),
+                ],
+            ))
+        );
+    }
+
+    #[test]
     fn set_if_simplify() {
         let registry = generate_registry();
         let mut s1 = Set::with_capacity(3);
@@ -3557,5 +4314,51 @@ mod tests {
             Box::new(SetExpression::Reference(ReferenceExpression::Constant(s0))),
         );
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn set_filter_simplify() {
+        let registry = generate_registry();
+        let mut s = Set::with_capacity(3);
+        s.insert(0);
+        s.insert(1);
+
+        let expression = SetExpression::Filter(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s.clone(),
+            ))),
+            0,
+            Box::new(Condition::Constant(true)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(s.clone()))
+        );
+
+        let expression = SetExpression::Filter(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s.clone(),
+            ))),
+            0,
+            Box::new(Condition::Constant(false)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(3)))
+        );
+
+        let expression = SetExpression::Filter(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(s))),
+            0,
+            Box::new(Condition::ComparisonE(
+                ComparisonOperator::Gt,
+                Box::new(ElementExpression::LocalVariable(0)),
+                Box::new(ElementExpression::Constant(1)),
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(3)))
+        );
     }
 }

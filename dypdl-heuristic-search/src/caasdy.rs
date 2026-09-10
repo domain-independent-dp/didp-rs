@@ -1,10 +1,10 @@
-use crate::search_algorithm::data_structure::{TransitionWithId};
+use crate::search_algorithm::data_structure::TransitionWithId;
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
     BestFirstSearch, CostNode, FNode, Parameters, Search, SearchInput, SuccessorGenerator,
 };
-use dypdl::{variable_type,ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;

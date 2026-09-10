@@ -103,6 +103,16 @@ where
     }
 
     #[inline]
+    fn get_number_of_set_resource_variables(&self) -> usize {
+        self.resource_variables.set_variables.len()
+    }
+
+    #[inline]
+    fn get_set_resource_variable(&self, i: usize) -> &Set {
+        &self.resource_variables.set_variables[i]
+    }
+
+    #[inline]
     fn get_number_of_element_resource_variables(&self) -> usize {
         self.resource_variables.element_variables.len()
     }
@@ -707,6 +717,7 @@ mod tests {
 
     fn generate_full_resource_variables() -> dypdl::ResourceVariables {
         dypdl::ResourceVariables {
+            set_variables: vec![],
             element_variables: vec![0, 1],
             integer_variables: vec![4, 5, 6],
             continuous_variables: vec![4.0, 5.0, 6.0],
@@ -771,6 +782,7 @@ mod tests {
 
         dypdl::Effect {
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            set_resource_effects: vec![],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
@@ -1122,6 +1134,7 @@ mod tests {
                 ],
             }),
             resource_variables: ResourceVariables {
+                set_variables: vec![],
                 element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],

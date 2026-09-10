@@ -280,6 +280,7 @@ macro_rules! define_getter {
             &mut self,
             i: usize,
             state: &S,
+            environment: &mut LocalEnvironment,
             functions: &StateFunctions,
             registry: &TableRegistry,
         ) -> $type
@@ -287,8 +288,13 @@ macro_rules! define_getter {
             S: StateInterface,
         {
             if self.$cycles[i] < self.current_cycle {
-                self.$field[i] =
-                    Some(functions.$functions[i].eval(state, self, functions, &registry));
+                self.$field[i] = Some(functions.$functions[i].eval_with_local_environment(
+                    state,
+                    self,
+                    environment,
+                    functions,
+                    &registry,
+                ));
                 self.$cycles[i] = self.current_cycle;
             }
 
@@ -345,12 +351,18 @@ impl StateFunctionCache {
         &mut self,
         i: usize,
         state: &S,
+        environment: &mut LocalEnvironment,
         functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> &Set {
         if self.set_cycles[i] < self.current_cycle {
-            self.set_values[i] =
-                Some(functions.set_functions[i].eval(state, self, functions, registry));
+            self.set_values[i] = Some(functions.set_functions[i].eval_with_local_environment(
+                state,
+                self,
+                environment,
+                functions,
+                registry,
+            ));
             self.set_cycles[i] = self.current_cycle;
         }
 
@@ -367,6 +379,7 @@ impl StateFunctionCache {
         i: usize,
         j: usize,
         state: &S,
+        environment: &mut LocalEnvironment,
         functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> (&Set, &Set)
@@ -374,8 +387,8 @@ impl StateFunctionCache {
         S: StateInterface,
     {
         // Evaluate the state functions.
-        self.get_set_value(i, state, functions, registry);
-        self.get_set_value(j, state, functions, registry);
+        self.get_set_value(i, state, environment, functions, registry);
+        self.get_set_value(j, state, environment, functions, registry);
 
         (
             self.set_values[i].as_ref().unwrap(),
@@ -690,13 +703,20 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         let expected1 = state_metadata.create_set(ob, &[0, 1]);
         assert!(expected1.is_ok());
         let expected1 = expected1.unwrap();
         assert_eq!(
-            function_cache.get_set_value(0, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected1
         );
 
@@ -704,16 +724,34 @@ mod tests {
         assert!(expected2.is_ok());
         let expected2 = expected2.unwrap();
         assert_eq!(
-            function_cache.get_set_value(1, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected2
         );
 
         assert_eq!(
-            function_cache.get_set_value(0, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected1
         );
         assert_eq!(
-            function_cache.get_set_value(1, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected2
         );
     }
@@ -745,9 +783,16 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_set_value(1, &state, &state_functions, &registry);
+        function_cache.get_set_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -778,6 +823,7 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         let expected1 = state_metadata.create_set(ob, &[0, 1]);
@@ -787,11 +833,25 @@ mod tests {
         assert!(expected2.is_ok());
         let expected2 = expected2.unwrap();
         assert_eq!(
-            function_cache.get_set_value_pair(0, 1, &state, &state_functions, &registry),
+            function_cache.get_set_value_pair(
+                0,
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             (&expected1, &expected2)
         );
         assert_eq!(
-            function_cache.get_set_value_pair(0, 1, &state, &state_functions, &registry),
+            function_cache.get_set_value_pair(
+                0,
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             (&expected1, &expected2)
         );
     }
@@ -827,9 +887,17 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_set_value_pair(2, 1, &state, &state_functions, &registry);
+        function_cache.get_set_value_pair(
+            2,
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[should_panic]
@@ -863,9 +931,17 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_set_value_pair(0, 2, &state, &state_functions, &registry);
+        function_cache.get_set_value_pair(
+            0,
+            2,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -896,6 +972,7 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         let expected1 = state_metadata.create_set(ob, &[0, 1]);
@@ -905,7 +982,13 @@ mod tests {
         function_cache.set_set_value(0, expected1.clone());
 
         assert_eq!(
-            function_cache.get_set_value(0, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected1
         );
 
@@ -916,16 +999,34 @@ mod tests {
         function_cache.set_set_value(1, expected2.clone());
 
         assert_eq!(
-            function_cache.get_set_value(1, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected2
         );
 
         assert_eq!(
-            function_cache.get_set_value(0, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected1
         );
         assert_eq!(
-            function_cache.get_set_value(1, &state, &state_functions, &registry),
+            function_cache.get_set_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             &expected2
         );
     }
@@ -978,22 +1079,47 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         assert_eq!(
-            function_cache.get_element_value(0, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
         assert_eq!(
-            function_cache.get_element_value(1, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
         assert_eq!(
-            function_cache.get_element_value(0, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
         assert_eq!(
-            function_cache.get_element_value(1, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
     }
@@ -1022,9 +1148,16 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_element_value(1, &state, &state_functions, &registry);
+        function_cache.get_element_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -1052,29 +1185,54 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         function_cache.set_element_value(0, 1);
 
         assert_eq!(
-            function_cache.get_element_value(0, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
 
         function_cache.set_element_value(1, 2);
 
         assert_eq!(
-            function_cache.get_element_value(1, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
 
         assert_eq!(
-            function_cache.get_element_value(0, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
 
         assert_eq!(
-            function_cache.get_element_value(1, &state, &state_functions, &registry),
+            function_cache.get_element_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
     }
@@ -1121,22 +1279,47 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
     }
@@ -1162,9 +1345,16 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_integer_value(1, &state, &state_functions, &registry);
+        function_cache.get_integer_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -1189,29 +1379,54 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         function_cache.set_integer_value(0, 1);
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
 
         function_cache.set_integer_value(1, 2);
 
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
 
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
     }
@@ -1255,22 +1470,47 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         assert_relative_eq!(
-            function_cache.get_continuous_value(0, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1.0
         );
         assert_relative_eq!(
-            function_cache.get_continuous_value(1, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2.0
         );
         assert_relative_eq!(
-            function_cache.get_continuous_value(0, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1.0
         );
         assert_relative_eq!(
-            function_cache.get_continuous_value(1, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2.0
         );
     }
@@ -1296,9 +1536,16 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_continuous_value(1, &state, &state_functions, &registry);
+        function_cache.get_continuous_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -1323,28 +1570,53 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         function_cache.set_continuous_value(0, 1.0);
 
         assert_relative_eq!(
-            function_cache.get_continuous_value(0, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1.0
         );
 
         function_cache.set_continuous_value(1, 2.0);
 
         assert_relative_eq!(
-            function_cache.get_continuous_value(1, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2.0
         );
 
         assert_relative_eq!(
-            function_cache.get_continuous_value(0, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1.0
         );
         assert_relative_eq!(
-            function_cache.get_continuous_value(1, &state, &state_functions, &registry),
+            function_cache.get_continuous_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2.0
         );
     }
@@ -1390,12 +1662,37 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        assert!(function_cache.get_boolean_value(0, &state, &state_functions, &registry));
-        assert!(!function_cache.get_boolean_value(1, &state, &state_functions, &registry));
-        assert!(function_cache.get_boolean_value(0, &state, &state_functions, &registry));
-        assert!(!function_cache.get_boolean_value(1, &state, &state_functions, &registry));
+        assert!(function_cache.get_boolean_value(
+            0,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ));
+        assert!(!function_cache.get_boolean_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ));
+        assert!(function_cache.get_boolean_value(
+            0,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ));
+        assert!(!function_cache.get_boolean_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ));
     }
 
     #[should_panic]
@@ -1420,9 +1717,16 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
-        function_cache.get_boolean_value(1, &state, &state_functions, &registry);
+        function_cache.get_boolean_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry,
+        );
     }
 
     #[test]
@@ -1449,18 +1753,43 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         function_cache.set_boolean_value(0, true);
 
-        assert!(function_cache.get_boolean_value(0, &state, &state_functions, &registry),);
+        assert!(function_cache.get_boolean_value(
+            0,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ),);
 
         function_cache.set_boolean_value(1, false);
 
-        assert!(!function_cache.get_boolean_value(1, &state, &state_functions, &registry),);
+        assert!(!function_cache.get_boolean_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ),);
 
-        assert!(function_cache.get_boolean_value(0, &state, &state_functions, &registry),);
-        assert!(!function_cache.get_boolean_value(1, &state, &state_functions, &registry),);
+        assert!(function_cache.get_boolean_value(
+            0,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ),);
+        assert!(!function_cache.get_boolean_value(
+            1,
+            &state,
+            &mut local_environment,
+            &state_functions,
+            &registry
+        ),);
     }
 
     #[should_panic]
@@ -1503,14 +1832,27 @@ mod tests {
         };
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             1
         );
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
 
@@ -1525,7 +1867,13 @@ mod tests {
         function_cache.clear();
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             2
         );
 
@@ -1540,11 +1888,23 @@ mod tests {
         function_cache.clear();
 
         assert_eq!(
-            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                0,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             3
         );
         assert_eq!(
-            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            function_cache.get_integer_value(
+                1,
+                &state,
+                &mut local_environment,
+                &state_functions,
+                &registry
+            ),
             4
         );
     }

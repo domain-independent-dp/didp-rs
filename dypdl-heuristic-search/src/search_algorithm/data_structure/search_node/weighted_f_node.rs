@@ -3,8 +3,8 @@ use super::super::transition::TransitionWithId;
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 use super::{BfsNode, CostNode, FNode, FNodeEvaluators};
 use dypdl::{
-    variable_type::Numeric, Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, Transition,
-    TransitionInterface,
+    variable_type::Numeric, Model, ParentAndChildStateFunctionCache, ReduceFunction,
+    StateFunctionCache, Transition, TransitionInterface,
 };
 use std::cmp::Ordering;
 use std::fmt::Display;

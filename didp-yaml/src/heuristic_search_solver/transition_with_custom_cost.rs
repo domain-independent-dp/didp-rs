@@ -1,11 +1,14 @@
 use crate::dypdl_parser::expression_parser;
+use crate::dypdl_parser::expression_parser::ModelData;
 use crate::util;
 use dypdl::CostExpression;
 use rustc_hash::FxHashMap;
 use std::error::Error;
 
+/// `model` is mutable because a custom cost expression may contain a `reduce`/`filter`/
+/// `filter` binder, which registers a fresh local variable in `model` as it is parsed.
 pub fn load_custom_cost_expressions(
-    model: &dypdl::Model,
+    model: &mut dypdl::Model,
     backward: bool,
     custom_cost_type: &dypdl::CostType,
     cost_expressions: &FxHashMap<String, String>,
@@ -22,25 +25,22 @@ pub fn load_custom_cost_expressions(
             parameters.insert(name.clone(), *value);
         }
         let custom_cost = if let Some(expression) = cost_expressions.get(&t.name) {
+            let mut model_data = ModelData {
+                metadata: &model.state_metadata,
+                functions: &model.state_functions,
+                registry: &model.table_registry,
+                parameters: &parameters,
+                local_variable_data: &mut model.local_variable_data,
+            };
             match custom_cost_type {
-                dypdl::CostType::Integer => {
-                    CostExpression::Integer(expression_parser::parse_integer(
-                        expression.clone(),
-                        &model.state_metadata,
-                        &model.state_functions,
-                        &model.table_registry,
-                        &parameters,
-                    )?)
-                }
-                dypdl::CostType::Continuous => {
-                    CostExpression::Continuous(expression_parser::parse_continuous(
-                        expression.clone(),
-                        &model.state_metadata,
-                        &model.state_functions,
-                        &model.table_registry,
-                        &parameters,
-                    )?)
-                }
+                dypdl::CostType::Integer => CostExpression::Integer(
+                    expression_parser::parse_integer(expression.clone(), &mut model_data)?
+                        .simplify(&model.table_registry),
+                ),
+                dypdl::CostType::Continuous => CostExpression::Continuous(
+                    expression_parser::parse_continuous(expression.clone(), &mut model_data)?
+                        .simplify(&model.table_registry),
+                ),
             }
         } else {
             return Err(util::YamlContentErr::new(format!(
@@ -63,25 +63,22 @@ pub fn load_custom_cost_expressions(
             parameters.insert(name.clone(), *value);
         }
         let custom_cost = if let Some(expression) = cost_expressions.get(&t.name) {
+            let mut model_data = ModelData {
+                metadata: &model.state_metadata,
+                functions: &model.state_functions,
+                registry: &model.table_registry,
+                parameters: &parameters,
+                local_variable_data: &mut model.local_variable_data,
+            };
             match custom_cost_type {
-                dypdl::CostType::Integer => {
-                    CostExpression::Integer(expression_parser::parse_integer(
-                        expression.clone(),
-                        &model.state_metadata,
-                        &model.state_functions,
-                        &model.table_registry,
-                        &parameters,
-                    )?)
-                }
-                dypdl::CostType::Continuous => {
-                    CostExpression::Continuous(expression_parser::parse_continuous(
-                        expression.clone(),
-                        &model.state_metadata,
-                        &model.state_functions,
-                        &model.table_registry,
-                        &parameters,
-                    )?)
-                }
+                dypdl::CostType::Integer => CostExpression::Integer(
+                    expression_parser::parse_integer(expression.clone(), &mut model_data)?
+                        .simplify(&model.table_registry),
+                ),
+                dypdl::CostType::Continuous => CostExpression::Continuous(
+                    expression_parser::parse_continuous(expression.clone(), &mut model_data)?
+                        .simplify(&model.table_registry),
+                ),
             }
         } else {
             return Err(util::YamlContentErr::new(format!(
@@ -146,7 +143,7 @@ mod tests {
 
     #[test]
     fn load_custom_cost_expressions_forward_ok() {
-        let model = generate_model();
+        let mut model = generate_model();
 
         let mut cost_expressions = FxHashMap::default();
         cost_expressions.insert(String::from("forward"), String::from("(* cost 1)"));
@@ -154,7 +151,7 @@ mod tests {
         let custom_cost_type = dypdl::CostType::Integer;
 
         let result =
-            load_custom_cost_expressions(&model, false, &custom_cost_type, &cost_expressions);
+            load_custom_cost_expressions(&mut model, false, &custom_cost_type, &cost_expressions);
         assert!(result.is_ok());
         let (custom_costs, forced_custom_costs) = result.unwrap();
         assert_eq!(
@@ -177,7 +174,7 @@ mod tests {
 
     #[test]
     fn load_custom_cost_expressions_backward_ok() {
-        let model = generate_model();
+        let mut model = generate_model();
 
         let mut cost_expressions = FxHashMap::default();
         cost_expressions.insert(String::from("backward"), String::from("(* cost 1)"));
@@ -185,7 +182,7 @@ mod tests {
         let custom_cost_type = dypdl::CostType::Integer;
 
         let result =
-            load_custom_cost_expressions(&model, true, &custom_cost_type, &cost_expressions);
+            load_custom_cost_expressions(&mut model, true, &custom_cost_type, &cost_expressions);
         assert!(result.is_ok());
         let (custom_costs, forced_custom_costs) = result.unwrap();
         assert_eq!(
@@ -208,7 +205,7 @@ mod tests {
 
     #[test]
     fn load_custom_cost_expressions_undefined_err() {
-        let model = generate_model();
+        let mut model = generate_model();
 
         let mut cost_expressions = FxHashMap::default();
         cost_expressions.insert(String::from("backward"), String::from("(* cost 3)"));
@@ -216,13 +213,13 @@ mod tests {
         let custom_cost_type = dypdl::CostType::Integer;
 
         let result =
-            load_custom_cost_expressions(&model, false, &custom_cost_type, &cost_expressions);
+            load_custom_cost_expressions(&mut model, false, &custom_cost_type, &cost_expressions);
         assert!(result.is_err());
     }
 
     #[test]
     fn load_custom_cost_expressions_parse_err() {
-        let model = generate_model();
+        let mut model = generate_model();
 
         let mut cost_expressions = FxHashMap::default();
         cost_expressions.insert(String::from("forward"), String::from("(* cost 1)"));
@@ -230,7 +227,7 @@ mod tests {
         let custom_cost_type = dypdl::CostType::Integer;
 
         let result =
-            load_custom_cost_expressions(&model, false, &custom_cost_type, &cost_expressions);
+            load_custom_cost_expressions(&mut model, false, &custom_cost_type, &cost_expressions);
         assert!(result.is_err());
     }
 }

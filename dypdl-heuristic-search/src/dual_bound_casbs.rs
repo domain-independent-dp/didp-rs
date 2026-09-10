@@ -1,6 +1,4 @@
-use crate::search_algorithm::data_structure::{
-    HashableSignatureVariables, TransitionWithId,
-};
+use crate::search_algorithm::data_structure::{HashableSignatureVariables, TransitionWithId};
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{shared_beam_search, SendableCostNode, SendableFNode};
@@ -137,12 +135,11 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &SendableCostNode<_>,
-                                         transition,
-                                         cache: &mut ParentAndChildStateFunctionCache,
-                                         _| {
-            node.generate_successor_node(transition, cache, &model)
-        };
+        let transition_evaluator =
+            move |node: &SendableCostNode<_>,
+                  transition,
+                  cache: &mut ParentAndChildStateFunctionCache,
+                  _| { node.generate_successor_node(transition, cache, &model) };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             shared_beam_search(
                 input,

@@ -336,6 +336,31 @@ def test_set_var_bool_raise():
             pass
 
 
+@pytest.mark.parametrize("value, expected", set_eval_cases)
+def test_set_resource_var(value, expected):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(
+        object_type=obj, target=value, less_is_better=False
+    )
+    state = model.target_state
+
+    assert state[var] == expected
+
+
+def test_set_resource_var_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(object_type=obj, target=[], less_is_better=False)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
+
+
 set_len_cases = [
     ([], 0),
     ([0], 1),
@@ -382,6 +407,18 @@ def test_set_var_len(value, expected):
     assert var.len().eval(state, model) == expected
 
 
+@pytest.mark.parametrize("value, expected", set_len_cases)
+def test_set_resource_var_len(value, expected):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(
+        object_type=obj, target=value, less_is_better=False
+    )
+    state = model.target_state
+
+    assert var.len().eval(state, model) == expected
+
+
 set_empty_cases = [
     ([], True),
     ([0], False),
@@ -418,6 +455,18 @@ def test_set_var_empty(value, expected):
     model = dp.Model()
     obj = model.add_object_type(number=4)
     var = model.add_set_var(object_type=obj, target=value)
+    state = model.target_state
+
+    assert var.is_empty().eval(state, model) == expected
+
+
+@pytest.mark.parametrize("value, expected", set_empty_cases)
+def test_set_resource_var_empty(value, expected):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(
+        object_type=obj, target=value, less_is_better=False
+    )
     state = model.target_state
 
     assert var.is_empty().eval(state, model) == expected
@@ -466,6 +515,18 @@ def test_set_var_complement(value, expected):
     assert var.complement().eval(state, model) == expected
 
 
+@pytest.mark.parametrize("value, expected", set_complement_cases)
+def test_set_resource_var_complement(value, expected):
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_resource_var(
+        object_type=obj, target=value, less_is_better=False
+    )
+    state = model.target_state
+
+    assert var.complement().eval(state, model) == expected
+
+
 class TestSetBinaryOperator:
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -473,6 +534,9 @@ class TestSetBinaryOperator:
     const = model.create_set_const(object_type=obj, value=[0, 1])
     expr = dp.SetExpr(const)
     var = model.add_set_var(object_type=obj, target=[0, 1])
+    res_var = model.add_set_resource_var(
+        object_type=obj, target=[0, 1], less_is_better=False
+    )
 
     empty_const = model.create_set_const(object_type=obj, value=[])
     empty_expr = dp.SetExpr(empty_const)
@@ -494,7 +558,7 @@ class TestSetBinaryOperator:
 
     or_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             or_cases.append((value, other, {0, 1}))
 
@@ -517,7 +581,7 @@ class TestSetBinaryOperator:
 
     sub_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             sub_cases.append((value, other, {0, 1}))
 
@@ -540,7 +604,7 @@ class TestSetBinaryOperator:
 
     and_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             and_cases.append((value, other, set()))
 
@@ -563,7 +627,7 @@ class TestSetBinaryOperator:
 
     xor_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             xor_cases.append((value, other, {0, 1}))
 
@@ -584,9 +648,9 @@ class TestSetBinaryOperator:
     def test_symmetric_difference(self, lhs, rhs, expected):
         assert lhs.symmetric_difference(rhs).eval(self.state, self.model) == expected
 
-    lt_cases = [(value, value, False) for value in [const, expr, var]]
+    lt_cases = [(value, value, False) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             lt_cases.append((value, other, False))
             lt_cases.append((other, value, True))
@@ -607,9 +671,9 @@ class TestSetBinaryOperator:
     def test_lt(self, lhs, rhs, expected):
         assert (lhs < rhs).eval(self.state, self.model) == expected
 
-    le_cases = [(value, value, True) for value in [const, expr, var]]
+    le_cases = [(value, value, True) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             le_cases.append((value, other, False))
             le_cases.append((other, value, True))
@@ -634,9 +698,9 @@ class TestSetBinaryOperator:
     def test_issubset(self, lhs, rhs, expected):
         assert lhs.issubset(rhs).eval(self.state, self.model) == expected
 
-    eq_cases = [(value, value, True) for value in [const, expr, var]]
+    eq_cases = [(value, value, True) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             eq_cases.append((value, other, False))
             eq_cases.append((other, value, False))
@@ -657,9 +721,9 @@ class TestSetBinaryOperator:
     def test_eq(self, lhs, rhs, expected):
         assert (lhs == rhs).eval(self.state, self.model) == expected
 
-    ne_cases = [(value, value, False) for value in [const, expr, var]]
+    ne_cases = [(value, value, False) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             ne_cases.append((value, other, True))
             ne_cases.append((other, value, True))
@@ -680,9 +744,9 @@ class TestSetBinaryOperator:
     def test_ne(self, lhs, rhs, expected):
         assert (lhs != rhs).eval(self.state, self.model) == expected
 
-    ge_cases = [(value, value, True) for value in [const, expr, var]]
+    ge_cases = [(value, value, True) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             ge_cases.append((value, other, True))
             ge_cases.append((other, value, False))
@@ -707,9 +771,9 @@ class TestSetBinaryOperator:
     def test_issuperset(self, lhs, rhs, expected):
         assert lhs.issuperset(rhs).eval(self.state, self.model) == expected
 
-    gt_cases = [(value, value, False) for value in [const, expr, var]]
+    gt_cases = [(value, value, False) for value in [const, expr, var, res_var]]
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
             gt_cases.append((value, other, True))
             gt_cases.append((other, value, False))
@@ -738,6 +802,9 @@ class TestSetElementOperator:
     const = model.create_set_const(object_type=obj, value=[0, 1])
     expr = dp.SetExpr(const)
     var = model.add_set_var(object_type=obj, target=[0, 1])
+    res_var = model.add_set_resource_var(
+        object_type=obj, target=[0, 1], less_is_better=False
+    )
 
     empty_const = model.create_set_const(object_type=obj, value=[])
     empty_expr = dp.SetExpr(empty_const)
@@ -759,7 +826,7 @@ class TestSetElementOperator:
 
     add_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
             add_cases.append((value, one, {0, 1}))
 
@@ -779,7 +846,7 @@ class TestSetElementOperator:
 
     discard_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
             discard_cases.append((value, one, {0}))
 
@@ -803,7 +870,7 @@ class TestSetElementOperator:
 
     contains_cases = []
 
-    for value in [const, expr, var]:
+    for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
             contains_cases.append((value, one, True))
 
@@ -821,6 +888,346 @@ class TestSetElementOperator:
     def test_contains(self, value, element, expected):
         assert value.contains(element).eval(self.state, self.model) == expected
 
+
+class TestSetIsdisjoint:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    const = model.create_set_const(object_type=obj, value=[0, 1])
+    expr = dp.SetExpr(const)
+    var = model.add_set_var(object_type=obj, target=[0, 1])
+    res_var = model.add_set_resource_var(
+        object_type=obj, target=[0, 1], less_is_better=False
+    )
+
+    overlap_const = model.create_set_const(object_type=obj, value=[1, 2])
+    disjoint_const = model.create_set_const(object_type=obj, value=[2, 3])
+
+    state = model.target_state
+
+    cases = []
+
+    for value in [const, expr, var, res_var]:
+        cases.append((value, overlap_const, False))
+        cases.append((value, disjoint_const, True))
+
+    @pytest.mark.parametrize("value, other, expected", cases)
+    def test_isdisjoint(self, value, other, expected):
+        assert value.isdisjoint(other).eval(self.state, self.model) == expected
+
+
+class TestLocalVar:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    x = model.add_local_var()
+    state = model.target_state
+
+    def test_add_named(self):
+        model = dp.Model()
+        model.add_local_var("x")
+        x = model.get_local_var("x")
+        obj = model.add_object_type(number=4)
+        var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+        state = model.target_state
+
+        assert var.filter(x, x > 1).eval(state, model) == {2, 3}
+
+    def test_add_duplicate_name_raise(self):
+        model = dp.Model()
+        model.add_local_var("x")
+
+        with pytest.raises(RuntimeError):
+            model.add_local_var("x")
+
+    def test_get_undefined_raise(self):
+        model = dp.Model()
+
+        with pytest.raises(RuntimeError):
+            model.get_local_var("x")
+
+    def test_bool_raise(self):
+        with pytest.raises(Exception):
+            bool(self.x)
+
+        with pytest.raises(Exception):
+            if self.x:
+                pass
+
+    def test_add(self):
+        assert self.var.filter(self.x, (self.x + 1) > 1).eval(
+            self.state, self.model
+        ) == {1, 2, 3}
+
+    def test_radd(self):
+        assert self.var.filter(self.x, (1 + self.x) > 1).eval(
+            self.state, self.model
+        ) == {1, 2, 3}
+
+    def test_sub(self):
+        assert self.var.filter(self.x, (self.x - self.x) == 0).eval(
+            self.state, self.model
+        ) == {0, 1, 2, 3}
+
+    def test_rsub(self):
+        assert self.var.filter(self.x, (3 - self.x) >= 2).eval(
+            self.state, self.model
+        ) == {0, 1}
+
+    def test_mul(self):
+        assert self.var.filter(self.x, (self.x * 2) >= 4).eval(
+            self.state, self.model
+        ) == {2, 3}
+
+    def test_rmul(self):
+        assert self.var.filter(self.x, (2 * self.x) >= 4).eval(
+            self.state, self.model
+        ) == {2, 3}
+
+    def test_floordiv(self):
+        assert self.var.filter(self.x, (self.x // 2) >= 1).eval(
+            self.state, self.model
+        ) == {2, 3}
+
+    def test_rfloordiv(self):
+        assert self.var.filter(self.x, (6 // (self.x + 1)) >= 3).eval(
+            self.state, self.model
+        ) == {0, 1}
+
+    def test_truediv(self):
+        assert self.var.filter(self.x, (self.x / 2) >= 1).eval(
+            self.state, self.model
+        ) == {2, 3}
+
+    def test_rtruediv(self):
+        assert self.var.filter(self.x, (6 / (self.x + 1)) >= 3).eval(
+            self.state, self.model
+        ) == {0, 1}
+
+    def test_mod(self):
+        assert self.var.filter(self.x, (self.x % 2) == 0).eval(
+            self.state, self.model
+        ) == {0, 2}
+
+    def test_rmod(self):
+        assert self.var.filter(self.x, (5 % (self.x + 1)) == 0).eval(
+            self.state, self.model
+        ) == {0}
+
+    def test_lt(self):
+        assert self.var.filter(self.x, self.x < 2).eval(self.state, self.model) == {
+            0,
+            1,
+        }
+
+    def test_le(self):
+        assert self.var.filter(self.x, self.x <= 2).eval(self.state, self.model) == {
+            0,
+            1,
+            2,
+        }
+
+    def test_eq(self):
+        assert self.var.filter(self.x, self.x == 2).eval(self.state, self.model) == {2}
+
+    def test_ne(self):
+        assert self.var.filter(self.x, self.x != 2).eval(self.state, self.model) == {
+            0,
+            1,
+            3,
+        }
+
+    def test_gt(self):
+        assert self.var.filter(self.x, self.x > 2).eval(self.state, self.model) == {3}
+
+    def test_ge(self):
+        assert self.var.filter(self.x, self.x >= 2).eval(self.state, self.model) == {
+            2,
+            3,
+        }
+
+
+class TestSetReduce:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    const = model.create_set_const(object_type=obj, value=[0, 1, 2, 3])
+    expr = dp.SetExpr(const)
+    var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    res_var = model.add_set_resource_var(
+        object_type=obj, target=[0, 1, 2, 3], less_is_better=False
+    )
+
+    int_table = model.add_int_table([0, 1, 2, 3])
+    float_table = model.add_float_table([0.0, 1.0, 2.0, 3.0])
+
+    x = model.add_local_var()
+    state = model.target_state
+
+    values = [const, expr, var, res_var]
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter(self, value):
+        assert value.filter(self.x, self.x > 1).eval(self.state, self.model) == {
+            2,
+            3,
+        }
+
+    @pytest.mark.parametrize("value", values)
+    def test_any(self, value):
+        assert value.any(self.x, self.x > 2).eval(self.state, self.model)
+        assert not value.any(self.x, self.x > 3).eval(self.state, self.model)
+
+    @pytest.mark.parametrize("value", values)
+    def test_all(self, value):
+        assert value.all(self.x, self.x < 4).eval(self.state, self.model)
+        assert not value.all(self.x, self.x > 0).eval(self.state, self.model)
+
+    def test_any_and_all_empty_set(self):
+        empty = self.model.create_set_const(object_type=self.obj, value=[])
+        assert not empty.any(self.x, self.x >= 0).eval(self.state, self.model)
+        assert empty.all(self.x, self.x < 0).eval(self.state, self.model)
+
+    @pytest.mark.parametrize("value", values)
+    def test_sum_int(self, value):
+        assert (
+            value.sum(self.x, self.int_table[self.x]).eval(self.state, self.model) == 6
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_sum_float(self, value):
+        assert (
+            value.sum(self.x, self.float_table[self.x]).eval(self.state, self.model)
+            == 6.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_product_int(self, value):
+        assert (
+            value.filter(self.x, self.x > 0)
+            .product(self.x, self.int_table[self.x])
+            .eval(self.state, self.model)
+            == 6
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_product_float(self, value):
+        assert (
+            value.filter(self.x, self.x > 0)
+            .product(self.x, self.float_table[self.x])
+            .eval(self.state, self.model)
+            == 6.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_max_int(self, value):
+        assert (
+            value.max(self.x, self.int_table[self.x]).eval(self.state, self.model) == 3
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_max_float(self, value):
+        assert (
+            value.max(self.x, self.float_table[self.x]).eval(self.state, self.model)
+            == 3.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_min_int(self, value):
+        assert (
+            value.min(self.x, self.int_table[self.x]).eval(self.state, self.model) == 0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_min_float(self, value):
+        assert (
+            value.min(self.x, self.float_table[self.x]).eval(self.state, self.model)
+            == 0.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_sum_int(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .sum(self.x, self.int_table[self.x])
+            .eval(self.state, self.model)
+            == 5
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_sum_float(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .sum(self.x, self.float_table[self.x])
+            .eval(self.state, self.model)
+            == 5.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_product_int(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .product(self.x, self.int_table[self.x])
+            .eval(self.state, self.model)
+            == 6
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_product_float(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .product(self.x, self.float_table[self.x])
+            .eval(self.state, self.model)
+            == 6.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_max_int(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .max(self.x, self.int_table[self.x])
+            .eval(self.state, self.model)
+            == 3
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_max_float(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .max(self.x, self.float_table[self.x])
+            .eval(self.state, self.model)
+            == 3.0
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_min_int(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .min(self.x, self.int_table[self.x])
+            .eval(self.state, self.model)
+            == 2
+        )
+
+    @pytest.mark.parametrize("value", values)
+    def test_filter_then_min_float(self, value):
+        assert (
+            value.filter(self.x, self.x > 1)
+            .min(self.x, self.float_table[self.x])
+            .eval(self.state, self.model)
+            == 2.0
+        )
+
+    def test_max_empty_set_raise(self):
+        with pytest.raises(BaseException):
+            self.var.filter(self.x, self.x > 100).max(
+                self.x, self.int_table[self.x]
+            ).eval(self.state, self.model)
+
+    def test_min_empty_set_raise(self):
+        with pytest.raises(BaseException):
+            self.var.filter(self.x, self.x > 100).min(
+                self.x, self.int_table[self.x]
+            ).eval(self.state, self.model)
 
 int_expr_cases = [(3, 3), (-3, -3)]
 
@@ -2174,6 +2581,195 @@ class TestMaxMinError:
     def test_min(self, lhs, rhs):
         with pytest.raises(TypeError):
             dp.min(lhs, rhs)
+
+
+class TestFractionalKnapsack:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target=[0, 1, 2])
+    state = model.target_state
+
+    capacity = 5
+    values = [2, 3, 5, 10]
+    weights = [1, 2, 4, 1]
+    values_float = [2.0, 3.0, 5.0, 10.0]
+    weights_float = [1.0, 2.0, 4.0, 1.0]
+
+    int_values = model.add_int_table(values)
+    int_weights = model.add_int_table(weights)
+    float_values = model.add_float_table(values_float)
+    float_weights = model.add_float_table(weights_float)
+
+    def test_array_int(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.values, self.weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_array_float(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.values_float, self.weights_float
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_array_expr(self):
+        values = [dp.IntExpr(v) for v in self.values]
+        weights = [dp.IntExpr(w) for w in self.weights]
+        expr = dp.fractional_knapsack(self.var, self.capacity, values, weights)
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_int_tables(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.int_values, self.int_weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_float_tables(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.float_values, self.float_weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_int_value_float_weight_tables(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.int_values, self.float_weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_float_value_int_weight_tables(self):
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.float_values, self.int_weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_mixed_array_and_table_raise(self):
+        with pytest.raises(TypeError):
+            dp.fractional_knapsack(
+                self.var, self.capacity, self.int_values, self.weights
+            )
+
+        with pytest.raises(TypeError):
+            dp.fractional_knapsack(
+                self.var, self.capacity, self.values, self.int_weights
+            )
+
+    def test_table_argument_does_not_hang(self):
+        # Regression test: `values`/`weights` used to be matched against a
+        # plain `list` conversion before a 1D table, and `IntTable1D.__getitem__`
+        # never raises `IndexError`, so Python's legacy sequence-iteration
+        # protocol used to loop forever trying to read the table as a list.
+        expr = dp.fractional_knapsack(
+            self.var, self.capacity, self.int_values, self.int_weights
+        )
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+
+class TestMinimumSpanningTree:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    nodes = model.create_set_const(object_type=obj, value=[0, 1, 2, 3])
+    state = model.target_state
+
+    edge_costs = model.add_int_table(
+        [[0, 1, 4, 3], [1, 0, 2, 5], [4, 2, 0, 6], [3, 5, 6, 0]]
+    )
+    edge_costs_float = model.add_float_table(
+        [
+            [0.0, 1.5, 4.5, 3.5],
+            [1.5, 0.0, 2.5, 5.5],
+            [4.5, 2.5, 0.0, 6.5],
+            [3.5, 5.5, 6.5, 0.0],
+        ]
+    )
+    connected = model.add_bool_table(
+        [
+            [True, True, True, False],
+            [True, True, True, True],
+            [True, True, True, True],
+            [False, True, True, True],
+        ]
+    )
+
+    int_edges = [(0, 1, 1), (0, 2, 4), (0, 3, 3), (1, 2, 2), (2, 3, 6)]
+    float_edges = [
+        (0, 1, 1.5),
+        (0, 2, 4.5),
+        (0, 3, 3.5),
+        (1, 2, 2.5),
+        (2, 3, 6.5),
+    ]
+    int_edges_with_connectivity = [
+        (0, 1, 1, True),
+        (0, 2, 4, True),
+        (0, 3, 3, True),
+        (1, 2, 2, False),
+        (2, 3, 6, True),
+    ]
+    float_edges_with_connectivity = [
+        (0, 1, 1.5, True),
+        (0, 2, 4.5, True),
+        (0, 3, 3.5, True),
+        (1, 2, 2.5, False),
+        (2, 3, 6.5, True),
+    ]
+
+    def test_int_table(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.edge_costs)
+
+        assert expr.eval(self.state, self.model) == 6
+
+    def test_float_table(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.edge_costs_float)
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_int_table_with_connected(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.edge_costs, self.connected)
+
+        assert expr.eval(self.state, self.model) == 8
+
+    def test_float_table_with_connected(self):
+        expr = dp.minimum_spanning_tree(
+            self.nodes, self.edge_costs_float, self.connected
+        )
+
+        assert expr.eval(self.state, self.model) == 9.5
+
+    def test_int_edges(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.int_edges)
+
+        assert expr.eval(self.state, self.model) == 6
+
+    def test_float_edges(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.float_edges)
+
+        assert expr.eval(self.state, self.model) == 7.5
+
+    def test_int_edges_with_connectivity(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.int_edges_with_connectivity)
+
+        assert expr.eval(self.state, self.model) == 8
+
+    def test_float_edges_with_connectivity(self):
+        expr = dp.minimum_spanning_tree(self.nodes, self.float_edges_with_connectivity)
+
+        assert expr.eval(self.state, self.model) == 9.5
+
+    def test_connected_with_edges_raise(self):
+        with pytest.raises(TypeError):
+            dp.minimum_spanning_tree(self.nodes, self.int_edges, self.connected)
+
+    def test_mixed_edge_arity_raise(self):
+        with pytest.raises(TypeError):
+            dp.minimum_spanning_tree(self.nodes, [(0, 1, 1), (1, 2, 2, True)])
 
 
 def test_condition_bool_error():

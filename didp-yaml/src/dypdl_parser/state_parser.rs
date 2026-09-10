@@ -49,6 +49,24 @@ pub fn load_state_from_yaml(
         let value = util::get_numeric_by_key(value, name)?;
         continuous_variables.push(value);
     }
+    let mut set_resource_variables = Vec::with_capacity(metadata.set_resource_variable_names.len());
+    for name in &metadata.set_resource_variable_names {
+        let values = util::get_usize_array_by_key(value, name)?;
+        let variable = metadata.get_set_resource_variable(name)?;
+        let object = metadata.get_object_type_of(variable)?;
+        let capacity = metadata.get_number_of_objects(object)?;
+        let mut set = Set::with_capacity(capacity);
+        for v in values {
+            if v >= capacity {
+                return Err(util::YamlContentErr::new(format!(
+                    "value `{v}` is out of range of a set resource variable `{name}`"
+                ))
+                .into());
+            }
+            set.insert(v);
+        }
+        set_resource_variables.push(set);
+    }
     let mut element_resource_variables =
         Vec::with_capacity(metadata.element_resource_variable_names.len());
     for name in &metadata.element_resource_variable_names {
@@ -75,6 +93,7 @@ pub fn load_state_from_yaml(
             continuous_variables,
         },
         resource_variables: ResourceVariables {
+            set_variables: set_resource_variables,
             element_variables: element_resource_variables,
             integer_variables: integer_resource_variables,
             continuous_variables: continuous_resource_variables,
@@ -124,18 +143,25 @@ pub fn ground_static_parameters_from_yaml(
     Ok(parameters_array)
 }
 
-type GroundedParameterPair = (Vec<FxHashMap<String, usize>>, Vec<Vec<(usize, usize)>>);
+type GroundedParameterTriplet = (
+    Vec<FxHashMap<String, usize>>,
+    Vec<Vec<(usize, usize)>>,
+    Vec<Vec<(usize, usize)>>,
+);
 
 pub fn ground_parameters_from_yaml(
     metadata: &StateMetadata,
     value: &yaml_rust::Yaml,
-) -> Result<GroundedParameterPair, Box<dyn std::error::Error>> {
+) -> Result<GroundedParameterTriplet, Box<dyn std::error::Error>> {
     let array = util::get_array(value)?;
     let mut parameters_array: Vec<FxHashMap<String, usize>> = Vec::with_capacity(array.len());
     parameters_array.push(FxHashMap::default());
     let mut elements_in_set_variable_array: Vec<Vec<(usize, usize)>> =
         Vec::with_capacity(array.len());
     elements_in_set_variable_array.push(vec![]);
+    let mut elements_in_set_resource_variable_array: Vec<Vec<(usize, usize)>> =
+        Vec::with_capacity(array.len());
+    elements_in_set_resource_variable_array.push(vec![]);
     let mut reserved_names = FxHashSet::default();
     for value in array {
         let map = util::get_map(value)?;
@@ -148,23 +174,32 @@ pub fn ground_parameters_from_yaml(
         }
         reserved_names.insert(name.clone());
         let object = util::get_string_by_key(map, "object")?;
-        let (n, set_index) = if let Ok(object) = metadata.get_object_type(&object) {
-            (metadata.get_number_of_objects(object)?, None)
-        } else if let Ok(v) = metadata.get_set_variable(&object) {
-            let object = metadata.get_object_type_of(v)?;
-            (metadata.get_number_of_objects(object)?, Some(v.id()))
-        } else {
-            return Err(util::YamlContentErr::new(format!(
-                "no such object or set variable `{object}`"
-            ))
-            .into());
-        };
+        let (n, set_index, set_resource_index) =
+            if let Ok(object) = metadata.get_object_type(&object) {
+                (metadata.get_number_of_objects(object)?, None, None)
+            } else if let Ok(v) = metadata.get_set_variable(&object) {
+                let object = metadata.get_object_type_of(v)?;
+                (metadata.get_number_of_objects(object)?, Some(v.id()), None)
+            } else if let Ok(v) = metadata.get_set_resource_variable(&object) {
+                let object = metadata.get_object_type_of(v)?;
+                (metadata.get_number_of_objects(object)?, None, Some(v.id()))
+            } else {
+                return Err(util::YamlContentErr::new(format!(
+                    "no such object, set variable, or set resource variable `{object}`"
+                ))
+                .into());
+            };
         let mut new_parameteres_set = Vec::with_capacity(parameters_array.len() * n);
         let mut new_elements_in_set_variable_array =
             Vec::with_capacity(elements_in_set_variable_array.len() * n);
-        for (parameters, elements_in_set_variable) in parameters_array
-            .iter()
-            .zip(elements_in_set_variable_array.iter())
+        let mut new_elements_in_set_resource_variable_array =
+            Vec::with_capacity(elements_in_set_resource_variable_array.len() * n);
+        for (parameters, (elements_in_set_variable, elements_in_set_resource_variable)) in
+            parameters_array.iter().zip(
+                elements_in_set_variable_array
+                    .iter()
+                    .zip(elements_in_set_resource_variable_array.iter()),
+            )
         {
             for i in 0..n {
                 let mut parameters = parameters.clone();
@@ -173,15 +208,26 @@ pub fn ground_parameters_from_yaml(
                 if let Some(j) = set_index {
                     elements_in_set_variable.push((j, i));
                 }
+                let mut elements_in_set_resource_variable =
+                    elements_in_set_resource_variable.clone();
+                if let Some(j) = set_resource_index {
+                    elements_in_set_resource_variable.push((j, i));
+                }
                 new_parameteres_set.push(parameters);
                 new_elements_in_set_variable_array.push(elements_in_set_variable);
+                new_elements_in_set_resource_variable_array.push(elements_in_set_resource_variable);
             }
         }
         parameters_array = new_parameteres_set;
         elements_in_set_variable_array = new_elements_in_set_variable_array;
+        elements_in_set_resource_variable_array = new_elements_in_set_resource_variable_array;
     }
 
-    Ok((parameters_array, elements_in_set_variable_array))
+    Ok((
+        parameters_array,
+        elements_in_set_variable_array,
+        elements_in_set_resource_variable_array,
+    ))
 }
 
 pub fn load_metadata_from_yaml(
@@ -216,7 +262,14 @@ pub fn load_metadata_from_yaml(
             "set" => {
                 let object_name = util::get_string_by_key(map, "object")?;
                 let ob = metadata.get_object_type(&object_name)?;
-                metadata.add_set_variable(name, ob)?;
+                match get_less_is_better(map)? {
+                    Some(value) => {
+                        metadata.add_set_resource_variable(name, ob, value)?;
+                    }
+                    None => {
+                        metadata.add_set_variable(name, ob)?;
+                    }
+                }
             }
             "element" => match get_less_is_better(map)? {
                 Some(value) => {
@@ -401,6 +454,7 @@ cr3: 3
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![],
                 element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![0, 1, 2, 3],
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
@@ -661,13 +715,18 @@ object: object
         let yaml = &yaml[0];
         let result = ground_parameters_from_yaml(&metadata, yaml);
         assert!(result.is_ok());
-        let (parameters, elements_in_set_variable_array) = result.unwrap();
+        let (parameters, elements_in_set_variable_array, elements_in_set_resource_variable_array) =
+            result.unwrap();
         let expected_elements_in_set_variable_array =
             vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
         assert_eq!(parameters, expected_parameters);
         assert_eq!(
             elements_in_set_variable_array,
             expected_elements_in_set_variable_array
+        );
+        assert_eq!(
+            elements_in_set_resource_variable_array,
+            vec![Vec::<(usize, usize)>::new(); 4]
         );
     }
 

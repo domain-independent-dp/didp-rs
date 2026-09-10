@@ -1,22 +1,23 @@
 use super::element_parser;
-use super::util::ParseErr;
+use super::util::{try_parse, ModelData, ParseErr};
 use dypdl::expression::ArgumentExpression;
+#[cfg(test)]
+use dypdl::LocalVariableData;
+#[cfg(test)]
 use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
 
 pub fn parse_argument<'a>(
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
-    if let Ok((element, rest)) =
-        element_parser::parse_expression(tokens, metadata, functions, registry, parameters)
-    {
+    if let Ok((element, rest)) = try_parse(model_data, |model_data| {
+        element_parser::parse_expression(tokens, model_data, local_variables)
+    }) {
         Ok((ArgumentExpression::Element(element), rest))
     } else if let Ok((set, rest)) =
-        element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)
+        element_parser::parse_set_expression(tokens, model_data, local_variables)
     {
         Ok((ArgumentExpression::Set(set), rest))
     } else {
@@ -28,10 +29,8 @@ pub fn parse_argument<'a>(
 
 pub fn parse_multiple_arguments<'a>(
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ArgumentExpression>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -42,7 +41,7 @@ pub fn parse_multiple_arguments<'a>(
         if next_token == ")" {
             return Ok((args, rest));
         }
-        let (expression, new_xs) = parse_argument(xs, metadata, functions, registry, parameters)?;
+        let (expression, new_xs) = parse_argument(xs, model_data, local_variables)?;
         args.push(expression);
         xs = new_xs;
     }
@@ -210,7 +209,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_argument(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -223,7 +232,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_argument(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -244,7 +263,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_argument(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -259,8 +288,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_multiple_arguments(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (result, rest) = result.unwrap();
         assert_eq!(
@@ -286,8 +324,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_multiple_arguments(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -302,8 +349,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_multiple_arguments(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 }

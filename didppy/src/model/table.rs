@@ -1201,6 +1201,21 @@ impl IntTable2DPy {
             (ArgumentUnion::Set(x), ArgumentUnion::Set(y)) => self.0.min(x, y),
         })
     }
+
+    /// Computes the minimum spanning tree value over a node set.
+    ///
+    /// Parameters
+    /// ----------
+    /// nodes: SetExpr, SetVar, SetResourceVar, or SetConst
+    ///     Nodes included in the graph.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum spanning tree value.
+    fn minimum_spanning_tree(&self, nodes: SetUnion) -> IntExprPy {
+        IntExprPy::from(self.0.minimum_spanning_tree(SetExpression::from(nodes)))
+    }
 }
 
 /// 3-dimensional table of integer constants.
@@ -1799,6 +1814,21 @@ impl FloatTable2DPy {
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.min_y(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Set(y)) => self.0.min(x, y),
         })
+    }
+
+    /// Computes the minimum spanning tree value over a node set.
+    ///
+    /// Parameters
+    /// ----------
+    /// nodes: SetExpr, SetVar, SetResourceVar, or SetConst
+    ///     Nodes included in the graph.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum spanning tree value.
+    fn minimum_spanning_tree(&self, nodes: SetUnion) -> FloatExprPy {
+        FloatExprPy::from(self.0.minimum_spanning_tree(SetExpression::from(nodes)))
     }
 }
 
@@ -3296,6 +3326,25 @@ mod tests {
     }
 
     #[test]
+    fn int_table_2d_minimum_spanning_tree() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let nodes = Set::with_capacity(10);
+        assert_eq!(
+            t_py.minimum_spanning_tree(SetUnion::Const(SetConstPy::from(nodes.clone()))),
+            IntExprPy::from(IntegerExpression::MinimumSpanningTree(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    nodes
+                ))),
+                t.id()
+            ))
+        );
+    }
+
+    #[test]
     fn int_table_3d_new() {
         let mut model = Model::default();
         let t = model.add_table_3d("t", vec![vec![vec![1]]]);
@@ -4212,6 +4261,25 @@ mod tests {
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )
             )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_minimum_spanning_tree() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let nodes = Set::with_capacity(10);
+        assert_eq!(
+            t_py.minimum_spanning_tree(SetUnion::Const(SetConstPy::from(nodes.clone()))),
+            FloatExprPy::from(ContinuousExpression::MinimumSpanningTree(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    nodes
+                ))),
+                t.id()
+            ))
         );
     }
 

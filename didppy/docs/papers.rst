@@ -25,3 +25,6 @@ DIDP Papers
 
     * This paper introduces state functions and :doc:`transition dominance <advanced-tutorials/transition-dominance>`.
 
+* Ryo Kuroiwa and Edward Lam. `Column Generation for Domain-Independent Dynamic Programming <https://drops.dagstuhl.de/storage/00lipics/lipics-vol379-cp2026/LIPIcs.CP.2026.37/LIPIcs.CP.2026.37.pdf>`_. *In Proceedings of the 32nd International Conference on Principles and Practice of Constraint Programming (CP).* 2026.
+
+    * This paper combines column generation with DIDP, introducing :class:`~didppy.SetResourceVar`, :doc:`higher-order expressions <advanced-tutorials/higher-order-expression>`, and :func:`~didppy.fractional_knapsack`.

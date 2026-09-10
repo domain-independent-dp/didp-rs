@@ -126,6 +126,14 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
         );
     }
 
+    let number_of_set_resource_variables = state_metadata.number_of_set_resource_variables();
+    if number_of_set_resource_variables > 0 {
+        state_variables.extend(
+            (0..number_of_set_resource_variables)
+                .map(|i: usize| set_resource_variable_to_yaml(state_metadata, i)),
+        );
+    }
+
     domain_hash.insert(
         Yaml::from_str("state_variables"),
         Yaml::Array(state_variables),
@@ -470,6 +478,34 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn model_with_set_resource_variables_round_trip() {
+        let mut model = Model::default();
+        let object = model.add_object_type("object", 3).unwrap();
+        let first_target = model.create_set(object, &[0]).unwrap();
+        let second_target = model.create_set(object, &[1]).unwrap();
+        let first = model
+            .add_set_resource_variable("first", object, false, first_target)
+            .unwrap();
+        let second = model
+            .add_set_resource_variable("second", object, true, second_target)
+            .unwrap();
+        let mut transition = Transition::new("update");
+        transition.add_effect(second, first).unwrap();
+        transition.add_effect(first, second).unwrap();
+        model.add_forward_transition(transition).unwrap();
+        model.add_base_case(vec![first.is_empty()]).unwrap();
+
+        let (domain, problem) = dump_model(&model).unwrap();
+        let domain = yaml_rust::YamlLoader::load_from_str(&domain).unwrap();
+        let problem = yaml_rust::YamlLoader::load_from_str(&problem).unwrap();
+        let reloaded = dypdl_parser::load_model_from_yaml(&domain[0], &problem[0]).unwrap();
+
+        assert_eq!(model.state_metadata, reloaded.state_metadata);
+        assert_eq!(model.target, reloaded.target);
+        assert_eq!(model.forward_transitions, reloaded.forward_transitions);
     }
 
     #[test]

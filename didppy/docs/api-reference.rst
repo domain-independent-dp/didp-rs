@@ -35,6 +35,8 @@ Functions
    didppy.sqrt
    didppy.log
    didppy.float
+   didppy.fractional_knapsack
+   didppy.minimum_spanning_tree
 
 State
 -----
@@ -53,6 +55,7 @@ Variables
    didppy.ElementVar
    didppy.ElementResourceVar
    didppy.SetVar
+   didppy.SetResourceVar
    didppy.IntVar
    didppy.IntResourceVar
    didppy.FloatVar

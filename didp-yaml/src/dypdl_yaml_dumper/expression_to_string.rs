@@ -4,6 +4,7 @@ use dypdl::CostExpression;
 use dypdl::Set;
 use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
+use std::fmt;
 
 pub trait ToYamlString {
     fn to_yaml_string(
@@ -194,6 +195,16 @@ impl ToYamlString for expression::Condition {
                 c1_str = c1.to_yaml_string(state_data, state_functions, table_registry)?,
                 c2_str = c2.to_yaml_string(state_data, state_functions, table_registry)?
             )),
+            Self::Quantified(quantifier, set, id, condition) => Ok(format!(
+                "({quantifier} __local_var_{id} {set_str} {condition_str})",
+                quantifier = match quantifier {
+                    expression::Quantifier::Any => "any",
+                    expression::Quantifier::All => "all",
+                },
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                condition_str =
+                    condition.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
             Self::ComparisonE(op, eexp1, eexp2) => Ok(format!(
                 "({op_str} {eexp1_str} {eexp2_str})",
                 op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
@@ -288,6 +299,50 @@ impl ToYamlString for expression::IntegerExpression {
                 sexp_str = sexp.to_yaml_string(state_data, state_functions, table_registry)?
             )),
             Self::Table(texp) => texp.to_yaml_string(state_data, state_functions, table_registry),
+            Self::MinimumSpanningTree(nodes, edge_weights) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edge_weights_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edge_weights_str = find_key_for_value(
+                    &table_registry.integer_tables.name_to_table_2d,
+                    edge_weights
+                )?
+            )),
+            Self::MinimumSpanningTreeWithConnectivity(nodes, edge_weights, connectivity) => {
+                Ok(format!(
+                    "(minimum_spanning_tree {nodes_str} {edge_weights_str} {connectivity_str})",
+                    nodes_str =
+                        nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                    edge_weights_str = find_key_for_value(
+                        &table_registry.integer_tables.name_to_table_2d,
+                        edge_weights
+                    )?,
+                    connectivity_str = find_key_for_value(
+                        &table_registry.bool_tables.name_to_table_2d,
+                        connectivity
+                    )?
+                ))
+            }
+            Self::MinimumSpanningTreeWithEdges(nodes, edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str =
+                    edges_to_yaml_string(edges, state_data, state_functions, table_registry)?
+            )),
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(nodes, edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str = edges_with_connectivity_to_yaml_string(
+                    edges,
+                    state_data,
+                    state_functions,
+                    table_registry
+                )?
+            )),
+            Self::MinimumSpanningTreeWithSortedEdges(nodes, sorted_edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str = sorted_edges_to_yaml_string(sorted_edges)
+            )),
             Self::If(cond, iexp1, iexp2) => Ok(format!(
                 "(if {cond_str} {iexp1_str} {iexp2_str})",
                 cond_str = cond.to_yaml_string(state_data, state_functions, table_registry)?,
@@ -298,6 +353,20 @@ impl ToYamlString for expression::IntegerExpression {
                 "({op_str} {cexp_str})",
                 op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
                 cexp_str = cexp.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
+            Self::Reduce(op, set, id, body) => Ok(format!(
+                "(reduce {op_str} __local_var_{id} {set_str} {body_str})",
+                op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                body_str = body.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
+            Self::FilterReduce(op, set, filter_id, reduce_id, condition, body) => Ok(format!(
+                "(reduce {op_str} __local_var_{reduce_id} (filter __local_var_{filter_id} {set_str} {condition_str}) {body_str})",
+                op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                condition_str =
+                    condition.to_yaml_string(state_data, state_functions, table_registry)?,
+                body_str = body.to_yaml_string(state_data, state_functions, table_registry)?
             )),
         }
     }
@@ -352,6 +421,50 @@ impl ToYamlString for expression::ContinuousExpression {
                 sexp_str = sexp.to_yaml_string(state_data, state_functions, table_registry)?
             )),
             Self::Table(texp) => texp.to_yaml_string(state_data, state_functions, table_registry),
+            Self::MinimumSpanningTree(nodes, edge_weights) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edge_weights_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edge_weights_str = find_key_for_value(
+                    &table_registry.continuous_tables.name_to_table_2d,
+                    edge_weights
+                )?
+            )),
+            Self::MinimumSpanningTreeWithConnectivity(nodes, edge_weights, connectivity) => {
+                Ok(format!(
+                    "(minimum_spanning_tree {nodes_str} {edge_weights_str} {connectivity_str})",
+                    nodes_str =
+                        nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                    edge_weights_str = find_key_for_value(
+                        &table_registry.continuous_tables.name_to_table_2d,
+                        edge_weights
+                    )?,
+                    connectivity_str = find_key_for_value(
+                        &table_registry.bool_tables.name_to_table_2d,
+                        connectivity
+                    )?
+                ))
+            }
+            Self::MinimumSpanningTreeWithEdges(nodes, edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str =
+                    edges_to_yaml_string(edges, state_data, state_functions, table_registry)?
+            )),
+            Self::MinimumSpanningTreeWithEdgesAndConnectivity(nodes, edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str = edges_with_connectivity_to_yaml_string(
+                    edges,
+                    state_data,
+                    state_functions,
+                    table_registry
+                )?
+            )),
+            Self::MinimumSpanningTreeWithSortedEdges(nodes, sorted_edges) => Ok(format!(
+                "(minimum_spanning_tree {nodes_str} {edges_str})",
+                nodes_str = nodes.to_yaml_string(state_data, state_functions, table_registry)?,
+                edges_str = sorted_edges_to_yaml_string(sorted_edges)
+            )),
             Self::If(cond, cexp1, cexp2) => Ok(format!(
                 "(if {cond_str} {cexp1_str} {cexp2_str})",
                 cond_str = cond.to_yaml_string(state_data, state_functions, table_registry)?,
@@ -361,6 +474,98 @@ impl ToYamlString for expression::ContinuousExpression {
             Self::FromInteger(iexp) => {
                 iexp.to_yaml_string(state_data, state_functions, table_registry)
             }
+            Self::Reduce(op, set, id, body) => Ok(format!(
+                "(reduce {op_str} __local_var_{id} {set_str} {body_str})",
+                op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                body_str = body.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
+            Self::FilterReduce(op, set, filter_id, reduce_id, condition, body) => Ok(format!(
+                "(reduce {op_str} __local_var_{reduce_id} (filter __local_var_{filter_id} {set_str} {condition_str}) {body_str})",
+                op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                condition_str =
+                    condition.to_yaml_string(state_data, state_functions, table_registry)?,
+                body_str = body.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
+            Self::FractionalKnapsackSorted(items, capacity, sorted_items) => Ok(format!(
+                "(fractional_knapsack {items_str} {capacity_str} {item_list_str})",
+                items_str = items.to_yaml_string(state_data, state_functions, table_registry)?,
+                capacity_str =
+                    capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                item_list_str = fractional_knapsack_sorted_items_to_yaml_string(sorted_items)
+            )),
+            Self::FractionalKnapsack(items, capacity, item_expressions) => Ok(format!(
+                "(fractional_knapsack {items_str} {capacity_str} {item_list_str})",
+                items_str = items.to_yaml_string(state_data, state_functions, table_registry)?,
+                capacity_str =
+                    capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                item_list_str = fractional_knapsack_expression_items_to_yaml_string(
+                    item_expressions,
+                    state_data,
+                    state_functions,
+                    table_registry
+                )?
+            )),
+            Self::FractionalKnapsackIntegerTable(items, capacity, values, weights) => Ok(format!(
+                "(fractional_knapsack {items_str} {capacity_str} {values_str} {weights_str})",
+                items_str = items.to_yaml_string(state_data, state_functions, table_registry)?,
+                capacity_str =
+                    capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                values_str =
+                    find_key_for_value(&table_registry.integer_tables.name_to_table_1d, values)?,
+                weights_str =
+                    find_key_for_value(&table_registry.integer_tables.name_to_table_1d, weights)?
+            )),
+            Self::FractionalKnapsackContinuousTable(items, capacity, values, weights) => {
+                Ok(format!(
+                    "(fractional_knapsack {items_str} {capacity_str} {values_str} {weights_str})",
+                    items_str =
+                        items.to_yaml_string(state_data, state_functions, table_registry)?,
+                    capacity_str =
+                        capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                    values_str = find_key_for_value(
+                        &table_registry.continuous_tables.name_to_table_1d,
+                        values
+                    )?,
+                    weights_str = find_key_for_value(
+                        &table_registry.continuous_tables.name_to_table_1d,
+                        weights
+                    )?
+                ))
+            }
+            Self::FractionalKnapsackIntegerValueContinuousWeightTable(
+                items,
+                capacity,
+                values,
+                weights,
+            ) => Ok(format!(
+                "(fractional_knapsack {items_str} {capacity_str} {values_str} {weights_str})",
+                items_str = items.to_yaml_string(state_data, state_functions, table_registry)?,
+                capacity_str =
+                    capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                values_str =
+                    find_key_for_value(&table_registry.integer_tables.name_to_table_1d, values)?,
+                weights_str = find_key_for_value(
+                    &table_registry.continuous_tables.name_to_table_1d,
+                    weights
+                )?
+            )),
+            Self::FractionalKnapsackContinuousValueIntegerWeightTable(
+                items,
+                capacity,
+                values,
+                weights,
+            ) => Ok(format!(
+                "(fractional_knapsack {items_str} {capacity_str} {values_str} {weights_str})",
+                items_str = items.to_yaml_string(state_data, state_functions, table_registry)?,
+                capacity_str =
+                    capacity.to_yaml_string(state_data, state_functions, table_registry)?,
+                values_str =
+                    find_key_for_value(&table_registry.continuous_tables.name_to_table_1d, values)?,
+                weights_str =
+                    find_key_for_value(&table_registry.integer_tables.name_to_table_1d, weights)?
+            )),
         }
     }
 }
@@ -397,6 +602,7 @@ impl ToYamlString for expression::ElementExpression {
             Self::StateFunction(index) => {
                 Ok(state_functions.element_function_names[*index].clone())
             }
+            Self::LocalVariable(id) => Ok(format!("__local_var_{id}")),
             Self::BinaryOperation(op, eexp1, eexp2) => Ok(format!(
                 "({op_str} {eexp1_str} {eexp2_str})",
                 op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
@@ -445,6 +651,12 @@ impl ToYamlString for expression::SetExpression {
             Self::Reduce(srexp) => {
                 srexp.to_yaml_string(state_data, state_functions, table_registry)
             }
+            Self::Filter(set, id, condition) => Ok(format!(
+                "(filter __local_var_{id} {set_str} {condition_str})",
+                set_str = set.to_yaml_string(state_data, state_functions, table_registry)?,
+                condition_str =
+                    condition.to_yaml_string(state_data, state_functions, table_registry)?
+            )),
             Self::If(cond, sexp1, sexp2) => Ok(format!(
                 "(if {cond_str} {sexp1_str} {sexp2_str})",
                 cond_str = cond.to_yaml_string(state_data, state_functions, table_registry)?,
@@ -470,6 +682,90 @@ fn find_key_for_value(
     } else {
         Err("Unfound table index.")
     }
+}
+
+fn sorted_edges_to_yaml_string<T: fmt::Display>(edges: &[(usize, usize, T)]) -> String {
+    let edges = edges
+        .iter()
+        .map(|(i, j, weight)| format!("({i} {j} {weight})"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("({edges})")
+}
+
+fn edges_to_yaml_string<T: ToYamlString>(
+    edges: &[(usize, usize, T)],
+    state_data: &StateMetadata,
+    state_functions: &StateFunctions,
+    table_registry: &TableRegistry,
+) -> Result<String, &'static str> {
+    let edges = edges
+        .iter()
+        .map(|(i, j, weight)| {
+            Ok(format!(
+                "({i} {j} {weight_str})",
+                weight_str = weight.to_yaml_string(state_data, state_functions, table_registry)?
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let edges = edges.join(" ");
+    Ok(format!("({edges})"))
+}
+
+fn edges_with_connectivity_to_yaml_string<T: ToYamlString>(
+    edges: &[(usize, usize, T, expression::Condition)],
+    state_data: &StateMetadata,
+    state_functions: &StateFunctions,
+    table_registry: &TableRegistry,
+) -> Result<String, &'static str> {
+    let edges = edges
+        .iter()
+        .map(|(i, j, weight, condition)| {
+            Ok(format!(
+                "({i} {j} {weight_str} {condition_str})",
+                weight_str = weight.to_yaml_string(state_data, state_functions, table_registry)?,
+                condition_str =
+                    condition.to_yaml_string(state_data, state_functions, table_registry)?
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let edges = edges.join(" ");
+    Ok(format!("({edges})"))
+}
+
+fn fractional_knapsack_sorted_items_to_yaml_string(
+    items: &[(usize, Continuous, Continuous)],
+) -> String {
+    let items = items
+        .iter()
+        .map(|(item, value, weight)| format!("({item} {value} {weight})"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("({items})")
+}
+
+fn fractional_knapsack_expression_items_to_yaml_string(
+    items: &[(
+        usize,
+        expression::ContinuousExpression,
+        expression::ContinuousExpression,
+    )],
+    state_data: &StateMetadata,
+    state_functions: &StateFunctions,
+    table_registry: &TableRegistry,
+) -> Result<String, &'static str> {
+    let items = items
+        .iter()
+        .map(|(item, value, weight)| {
+            Ok(format!(
+                "({item} {value_str} {weight_str})",
+                value_str = value.to_yaml_string(state_data, state_functions, table_registry)?,
+                weight_str = weight.to_yaml_string(state_data, state_functions, table_registry)?
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .join(" ");
+    Ok(format!("({items})"))
 }
 
 impl ToYamlString for expression::SetReduceExpression {
@@ -533,6 +829,9 @@ impl ToYamlString for expression::ReferenceExpression<Set> {
         match self {
             Self::Constant(set) => Ok(set.to_variable_string()),
             Self::Variable(index) => Ok(state_data.set_variable_names[*index].clone()),
+            Self::ResourceVariable(index) => {
+                Ok(state_data.set_resource_variable_names[*index].clone())
+            }
             Self::Table(texp) => texp.to_yaml_string(state_data, state_functions, table_registry),
         }
     }
@@ -793,18 +1092,62 @@ mod tests {
         let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("f4"), 0);
 
+        let integer_tables = dypdl::TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
+        let mut name_to_constant = FxHashMap::default();
+        name_to_constant.insert(String::from("cf0"), 0.0);
+
+        let tables_1d = vec![Table1D::new(Vec::new())];
+        let mut name_to_table_1d = FxHashMap::default();
+        name_to_table_1d.insert(String::from("cf1"), 0);
+
+        let tables_2d = vec![Table2D::new(Vec::new())];
+        let mut name_to_table_2d = FxHashMap::default();
+        name_to_table_2d.insert(String::from("cf2"), 0);
+
+        let tables_3d = vec![Table3D::new(Vec::new())];
+        let mut name_to_table_3d = FxHashMap::default();
+        name_to_table_3d.insert(String::from("cf3"), 0);
+
+        let tables = vec![Table::new(FxHashMap::default(), 0.0)];
+        let mut name_to_table = FxHashMap::default();
+        name_to_table.insert(String::from("cf4"), 0);
+
+        let continuous_tables = dypdl::TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
+        let tables_2d = vec![Table2D::new(Vec::new())];
+        let mut name_to_table_2d = FxHashMap::default();
+        name_to_table_2d.insert(String::from("b2"), 0);
+        let bool_tables = dypdl::TableData {
+            tables_2d,
+            name_to_table_2d,
+            ..Default::default()
+        };
+
         dypdl::TableRegistry {
-            integer_tables: dypdl::TableData {
-                name_to_constant,
-                tables_1d,
-                name_to_table_1d,
-                tables_2d,
-                name_to_table_2d,
-                tables_3d,
-                name_to_table_3d,
-                tables,
-                name_to_table,
-            },
+            integer_tables,
+            continuous_tables,
+            bool_tables,
             ..Default::default()
         }
     }
@@ -1275,6 +1618,41 @@ mod tests {
             "(or true true)".to_owned()
         );
 
+        let set = expression::SetExpression::default();
+        let condition = expression::Condition::Quantified(
+            expression::Quantifier::Any,
+            Box::new(set.clone()),
+            2,
+            Box::new(true_base_condition.clone()),
+        );
+        assert_eq!(
+            condition
+                .to_yaml_string(
+                    &StateMetadata::default(),
+                    &StateFunctions::default(),
+                    &TableRegistry::default()
+                )
+                .unwrap(),
+            "(any __local_var_2 { : 0} true)".to_owned()
+        );
+
+        let condition = expression::Condition::Quantified(
+            expression::Quantifier::All,
+            Box::new(set),
+            3,
+            Box::new(true_base_condition.clone()),
+        );
+        assert_eq!(
+            condition
+                .to_yaml_string(
+                    &StateMetadata::default(),
+                    &StateFunctions::default(),
+                    &TableRegistry::default()
+                )
+                .unwrap(),
+            "(all __local_var_3 { : 0} true)".to_owned()
+        );
+
         let condition = expression::Condition::ComparisonE(
             expression::ComparisonOperator::Eq,
             expression::ElementExpression::Constant(0).into(),
@@ -1559,6 +1937,113 @@ mod tests {
                 .unwrap(),
             "(ceil 3.3)".to_owned()
         );
+
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let nodes = expression::SetExpression::Reference(ReferenceExpression::Variable(0));
+
+        let integer_expression =
+            expression::IntegerExpression::MinimumSpanningTree(Box::new(nodes.clone()), 0);
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 f2)".to_owned()
+        );
+
+        let integer_expression = expression::IntegerExpression::MinimumSpanningTreeWithConnectivity(
+            Box::new(nodes.clone()),
+            0,
+            0,
+        );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 f2 b2)".to_owned()
+        );
+
+        let integer_expression = expression::IntegerExpression::MinimumSpanningTreeWithEdges(
+            Box::new(nodes.clone()),
+            vec![
+                (0, 1, expression::IntegerExpression::Variable(0)),
+                (1, 2, expression::IntegerExpression::Constant(3)),
+            ],
+        );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 n0) (1 2 3)))".to_owned()
+        );
+
+        let integer_expression =
+            expression::IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                Box::new(nodes.clone()),
+                vec![
+                    (
+                        0,
+                        1,
+                        expression::IntegerExpression::Variable(0),
+                        expression::Condition::Constant(true),
+                    ),
+                    (
+                        1,
+                        2,
+                        expression::IntegerExpression::Constant(3),
+                        expression::Condition::Constant(false),
+                    ),
+                ],
+            );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 n0 true) (1 2 3 false)))".to_owned()
+        );
+
+        let integer_expression = expression::IntegerExpression::MinimumSpanningTreeWithSortedEdges(
+            Box::new(nodes),
+            vec![(0, 1, 2), (1, 2, 3)],
+        );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 2) (1 2 3)))".to_owned()
+        );
+
+        let integer_expression = expression::IntegerExpression::Reduce(
+            expression::ReduceOperator::Sum,
+            Box::new(expression::SetExpression::Reference(
+                ReferenceExpression::Variable(0),
+            )),
+            3,
+            Box::new(expression::IntegerExpression::Constant(1)),
+        );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(reduce sum __local_var_3 s0 1)".to_owned()
+        );
+
+        let integer_expression = expression::IntegerExpression::FilterReduce(
+            expression::ReduceOperator::Sum,
+            Box::new(expression::SetExpression::Reference(
+                ReferenceExpression::Variable(0),
+            )),
+            2,
+            3,
+            Box::new(expression::Condition::Constant(true)),
+            Box::new(expression::IntegerExpression::Constant(1)),
+        );
+        assert_eq!(
+            integer_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(reduce sum __local_var_3 (filter __local_var_2 s0 true) 1)".to_owned()
+        );
     }
 
     #[test]
@@ -1712,6 +2197,116 @@ mod tests {
                 )
                 .unwrap(),
             "(if true 0.1 0.1)".to_owned()
+        );
+
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let items = expression::SetExpression::Reference(ReferenceExpression::Variable(0));
+
+        let continuous_expression =
+            expression::ContinuousExpression::MinimumSpanningTreeWithConnectivity(
+                Box::new(items.clone()),
+                0,
+                0,
+            );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 cf2 b2)".to_owned()
+        );
+
+        let continuous_expression = expression::ContinuousExpression::MinimumSpanningTreeWithEdges(
+            Box::new(items.clone()),
+            vec![
+                (0, 1, expression::ContinuousExpression::Variable(0)),
+                (1, 2, expression::ContinuousExpression::Constant(2.5)),
+            ],
+        );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 c0) (1 2 2.5)))".to_owned()
+        );
+
+        let continuous_expression =
+            expression::ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                Box::new(items.clone()),
+                vec![
+                    (
+                        0,
+                        1,
+                        expression::ContinuousExpression::Variable(0),
+                        expression::Condition::Constant(true),
+                    ),
+                    (
+                        1,
+                        2,
+                        expression::ContinuousExpression::Constant(2.5),
+                        expression::Condition::Constant(false),
+                    ),
+                ],
+            );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 c0 true) (1 2 2.5 false)))".to_owned()
+        );
+
+        let continuous_expression =
+            expression::ContinuousExpression::MinimumSpanningTreeWithSortedEdges(
+                Box::new(items.clone()),
+                vec![(0, 1, 2.5)],
+            );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(minimum_spanning_tree s0 ((0 1 2.5)))".to_owned()
+        );
+
+        let continuous_expression = expression::ContinuousExpression::FractionalKnapsack(
+            Box::new(items.clone()),
+            Box::new(expression::ContinuousExpression::Variable(0)),
+            vec![(
+                0,
+                expression::ContinuousExpression::Variable(1),
+                expression::ContinuousExpression::Constant(2.0),
+            )],
+        );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(fractional_knapsack s0 c0 ((0 c1 2)))".to_owned()
+        );
+
+        let continuous_expression = expression::ContinuousExpression::FractionalKnapsackSorted(
+            Box::new(items.clone()),
+            Box::new(expression::ContinuousExpression::Variable(0)),
+            vec![(1, 3.0, 2.0), (0, 1.0, 1.0)],
+        );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(fractional_knapsack s0 c0 ((1 3 2) (0 1 1)))".to_owned()
+        );
+
+        let continuous_expression =
+            expression::ContinuousExpression::FractionalKnapsackIntegerValueContinuousWeightTable(
+                Box::new(items),
+                Box::new(expression::ContinuousExpression::Variable(0)),
+                0,
+                0,
+            );
+        assert_eq!(
+            continuous_expression
+                .to_yaml_string(&metadata, &StateFunctions::default(), &registry)
+                .unwrap(),
+            "(fractional_knapsack s0 c0 f1 cf1)".to_owned()
         );
     }
 
@@ -1909,6 +2504,22 @@ mod tests {
                 )
                 .unwrap(),
             "(if true { : 0} { : 0})".to_owned()
+        );
+
+        let set_expression = expression::SetExpression::Filter(
+            base_set_expression.clone().into(),
+            3,
+            expression::Condition::Constant(true).into(),
+        );
+        assert_eq!(
+            set_expression
+                .to_yaml_string(
+                    &StateMetadata::default(),
+                    &StateFunctions::default(),
+                    &TableRegistry::default()
+                )
+                .unwrap(),
+            "(filter __local_var_3 { : 0} true)".to_owned()
         );
     }
 
@@ -2495,7 +3106,16 @@ mod tests {
         let parameters = generate_parameters();
 
         let text = "(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))".to_string();
-        let result = parse_set(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_set(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2514,7 +3134,16 @@ mod tests {
         let parameters = generate_parameters();
 
         let text = "(abs (+ n0 (neg n1)))".to_string();
-        let result = parse_integer(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_integer(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2533,7 +3162,16 @@ mod tests {
         let parameters = generate_parameters();
 
         let text = "(sqrt (pow (* c0 c1) 0.4))".to_string();
-        let result = parse_continuous(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_continuous(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2552,7 +3190,16 @@ mod tests {
         let parameters = generate_parameters();
 
         let text = "(max (+ e0 e1) (- e2 e3))".to_string();
-        let result = parse_element(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_element(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2571,7 +3218,16 @@ mod tests {
         let parameters = generate_parameters();
         let text = "(not (and (and (and true (is_subset s0 s1)) (is_empty s0)) (or (< 1 n1) (is_in 2 s0))))"
             .to_string();
-        let result = parse_condition(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_condition(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2598,7 +3254,16 @@ mod tests {
         let text = "(- (ceil (sum f1 s1)) (if (>= n0 (/ c1 3.0)) 1 0))".to_string();
         let test_text = "(- (ceil (sum f1 s1)) (if (>= n0 (/ c1 3)) 1 0))".to_string();
 
-        let result = parse_integer(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_integer(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =
@@ -2618,7 +3283,16 @@ mod tests {
 
         let text = "(- (ceil (sum f1 s1)) (if (>= n0 (/ c1 3.5)) 1 0))".to_string();
 
-        let result = parse_integer(text.clone(), &metadata, &functions, &registry, &parameters);
+        let result = parse_integer(
+            text.clone(),
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
 
         let expr_string =

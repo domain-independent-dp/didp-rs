@@ -11,25 +11,24 @@ mod integer_parser;
 mod numeric_table_parser;
 mod util;
 
-pub use util::ParseErr;
+pub use util::{ModelData, ParseErr};
 
 /// Returns an integer expression parsed from a string value.
 ///
-/// `parameters` specify names and values of constants.
+/// `model_data.parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in
+/// `model_data.local_variable_data`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn parse_integer(
     text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
 ) -> Result<expression::IntegerExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        integer_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
+        integer_parser::parse_expression(&tokens, model_data, &FxHashMap::default())?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -42,21 +41,20 @@ pub fn parse_integer(
 
 /// Returns a continuous expression parsed from a string value.
 ///
-/// `parameters` specify names and values of constants.
+/// `model_data.parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in
+/// `model_data.local_variable_data`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn parse_continuous(
     text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
 ) -> Result<expression::ContinuousExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        continuous_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
+        continuous_parser::parse_expression(&tokens, model_data, &FxHashMap::default())?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -69,21 +67,20 @@ pub fn parse_continuous(
 
 /// Returns an element expression parsed from a string value.
 ///
-/// `parameters` specify names and values of constants.
+/// `model_data.parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in
+/// `model_data.local_variable_data`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn parse_element(
     text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
 ) -> Result<expression::ElementExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        element_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
+        element_parser::parse_expression(&tokens, model_data, &FxHashMap::default())?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -96,21 +93,20 @@ pub fn parse_element(
 
 /// Returns a set expression parsed from a string value.
 ///
-/// `parameters` specify names and values of constants.
+/// `model_data.parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in
+/// `model_data.local_variable_data`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn parse_set(
     text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
 ) -> Result<expression::SetExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        element_parser::parse_set_expression(&tokens, metadata, functions, registry, parameters)?;
+        element_parser::parse_set_expression(&tokens, model_data, &FxHashMap::default())?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -123,21 +119,20 @@ pub fn parse_set(
 
 /// Returns a condition parsed from a string value.
 ///
-/// `parameters` specify names and values of constants.
+/// `model_data.parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in
+/// `model_data.local_variable_data`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn parse_condition(
     text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
 ) -> Result<expression::Condition, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        condition_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
+        condition_parser::parse_expression(&tokens, model_data, &FxHashMap::default())?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -305,7 +300,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))".to_string();
-        let result = parse_set(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_set(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
     }
 
@@ -316,7 +320,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "s0)".to_string();
-        let result = parse_set(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_set(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -327,7 +340,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "n0".to_string();
-        let result = parse_integer(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_integer(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
     }
 
@@ -338,7 +360,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "n0)".to_string();
-        let result = parse_integer(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_integer(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -349,7 +380,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "c0".to_string();
-        let result = parse_continuous(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_continuous(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
     }
 
@@ -360,7 +400,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "c0)".to_string();
-        let result = parse_continuous(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_continuous(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -371,7 +420,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "e0".to_string();
-        let result = parse_element(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_element(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
     }
 
@@ -382,7 +440,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "e0)".to_string();
-        let result = parse_element(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_element(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -394,7 +461,16 @@ mod tests {
         let parameters = generate_parameters();
         let text = "(not (and (and (and (> n0 2) (is_subset s0 s1)) (is_empty s0)) (or (< 1 n1) (is_in 2 s0))))"
             .to_string();
-        let result = parse_condition(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_condition(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_ok());
     }
 
@@ -405,7 +481,16 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(is_empty s[0]))".to_string();
-        let result = parse_condition(text, &metadata, &functions, &registry, &parameters);
+        let result = parse_condition(
+            text,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+        );
         assert!(result.is_err());
     }
 

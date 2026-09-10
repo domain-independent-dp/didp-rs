@@ -31,6 +31,7 @@ pub fn transition_to_yaml(
         }
     }
     insert_effects_to_yaml!(set_effects, set_variable_names);
+    insert_effects_to_yaml!(set_resource_effects, set_resource_variable_names);
     insert_effects_to_yaml!(element_effects, element_variable_names);
     insert_effects_to_yaml!(element_resource_effects, element_resource_variable_names);
     insert_effects_to_yaml!(integer_effects, integer_variable_names);
@@ -87,7 +88,9 @@ pub fn transition_to_yaml(
 
 #[cfg(test)]
 mod tests {
-    use dypdl::expression::{BinaryOperator, Condition, IntegerExpression};
+    use dypdl::expression::{
+        BinaryOperator, Condition, IntegerExpression, ReferenceExpression, SetExpression,
+    };
     use dypdl::{Effect, GroundedCondition, StateFunctions, TableRegistry, Transition};
     use rustc_hash::FxHashMap;
     use yaml_rust::yaml::Hash;
@@ -106,6 +109,12 @@ mod tests {
         name_to_set_variable.insert("s0".to_string(), 0);
         name_to_set_variable.insert("s1".to_string(), 1);
         let set_variable_to_object = vec![0, 0];
+
+        let set_resource_variable_names = vec!["sr0".to_string(), "sr1".to_string()];
+        let mut name_to_set_resource_variable = FxHashMap::default();
+        name_to_set_resource_variable.insert("sr0".to_string(), 0);
+        name_to_set_resource_variable.insert("sr1".to_string(), 1);
+        let set_resource_variable_to_object = vec![0, 0];
 
         let element_variable_names = vec!["e0".to_string(), "e1".to_string()];
         let mut name_to_element_variable = FxHashMap::default();
@@ -146,6 +155,10 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
+            set_resource_variable_names,
+            name_to_set_resource_variable,
+            set_resource_variable_to_object,
+            set_less_is_better: vec![false, true],
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -163,6 +176,7 @@ mod tests {
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
             continuous_less_is_better: vec![false, true],
+            ..Default::default()
         }
     }
 
@@ -173,6 +187,7 @@ mod tests {
             parameter_names: vec![],
             parameter_values: vec![],
             elements_in_set_variable: vec![(0, 0)],
+            elements_in_set_resource_variable: vec![],
             preconditions: vec![GroundedCondition {
                 condition: Condition::And(
                     Condition::Constant(true).into(),
@@ -181,6 +196,10 @@ mod tests {
                 ..Default::default()
             }],
             effect: Effect {
+                set_resource_effects: vec![(
+                    0,
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                )],
                 integer_effects: vec![(0, IntegerExpression::Constant(3))],
                 ..Default::default()
             },
@@ -196,6 +215,7 @@ mod tests {
         expected_yaml.insert(Yaml::from_str("name"), Yaml::from_str("t1"));
 
         let mut effect_hash = Hash::new();
+        effect_hash.insert(Yaml::from_str("sr0"), Yaml::String("s0".to_owned()));
         effect_hash.insert(Yaml::from_str("i0"), Yaml::String("3".to_owned()));
         expected_yaml.insert(Yaml::from_str("effect"), Yaml::Hash(effect_hash));
 

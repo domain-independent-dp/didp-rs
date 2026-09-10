@@ -1,4 +1,5 @@
 use super::expression_parser;
+use super::expression_parser::ModelData;
 use super::grounded_condition_parser;
 use super::parse_expression_from_yaml::{
     parse_continuous_from_yaml, parse_element_from_yaml, parse_integer_from_yaml,
@@ -8,7 +9,8 @@ use crate::util;
 use dypdl::expression;
 use dypdl::variable_type::Element;
 use dypdl::{
-    CostExpression, CostType, Effect, StateFunctions, StateMetadata, TableRegistry, Transition,
+    CostExpression, CostType, Effect, LocalVariableData, StateFunctions, StateMetadata,
+    TableRegistry, Transition,
 };
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
@@ -31,6 +33,7 @@ pub fn load_transitions_from_yaml(
     functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<TransitionsWithFlags, Box<dyn Error>> {
     lazy_static! {
         static ref PARAMETERS_KEY: Yaml = Yaml::from_str("parameters");
@@ -41,21 +44,30 @@ pub fn load_transitions_from_yaml(
     let map = util::get_map(value)?;
     let lifted_name = util::get_string_by_key(map, "name")?;
 
-    let (parameters_array, elements_in_set_variable_array, parameter_names) =
-        match map.get(&PARAMETERS_KEY) {
-            Some(value) => {
-                let result = ground_parameters_from_yaml(metadata, value)?;
-                let array = util::get_array(value)?;
-                let mut parameter_names = Vec::with_capacity(array.len());
-                for map in array {
-                    let map = util::get_map(map)?;
-                    let value = util::get_string_by_key(map, "name")?;
-                    parameter_names.push(value);
-                }
-                (result.0, result.1, parameter_names)
+    let (
+        parameters_array,
+        elements_in_set_variable_array,
+        elements_in_set_resource_variable_array,
+        parameter_names,
+    ) = match map.get(&PARAMETERS_KEY) {
+        Some(value) => {
+            let result = ground_parameters_from_yaml(metadata, value)?;
+            let array = util::get_array(value)?;
+            let mut parameter_names = Vec::with_capacity(array.len());
+            for map in array {
+                let map = util::get_map(map)?;
+                let value = util::get_string_by_key(map, "name")?;
+                parameter_names.push(value);
             }
-            None => (vec![FxHashMap::default()], vec![vec![]], vec![]),
-        };
+            (result.0, result.1, result.2, parameter_names)
+        }
+        None => (
+            vec![FxHashMap::default()],
+            vec![vec![]],
+            vec![vec![]],
+            vec![],
+        ),
+    };
 
     let effect = map.get(&Yaml::String(String::from("effect")));
     let lifted_cost = map.get(&Yaml::String(String::from("cost")));
@@ -64,9 +76,12 @@ pub fn load_transitions_from_yaml(
         None => None,
     };
     let mut transitions = Vec::with_capacity(parameters_array.len());
-    'outer: for (parameters, elements_in_set_variable) in parameters_array
-        .into_iter()
-        .zip(elements_in_set_variable_array.into_iter())
+    'outer: for (parameters, (elements_in_set_variable, elements_in_set_resource_variable)) in
+        parameters_array.into_iter().zip(
+            elements_in_set_variable_array
+                .into_iter()
+                .zip(elements_in_set_resource_variable_array),
+        )
     {
         let parameter_values = parameter_names
             .iter()
@@ -82,12 +97,14 @@ pub fn load_transitions_from_yaml(
                         functions,
                         registry,
                         &parameters,
+                        &mut *local_variable_data,
                     )?;
                     for condition in conditions {
                         match condition.condition {
                             expression::Condition::Constant(true) => continue,
                             expression::Condition::Constant(false)
-                                if condition.elements_in_set_variable.is_empty() =>
+                                if condition.elements_in_set_variable.is_empty()
+                                    && condition.elements_in_set_resource_variable.is_empty() =>
                             {
                                 continue 'outer
                             }
@@ -100,30 +117,34 @@ pub fn load_transitions_from_yaml(
             None => Vec::new(),
         };
         let effect = match effect {
-            Some(effect) => {
-                load_effect_from_yaml(effect, metadata, functions, registry, &parameters)?
-            }
+            Some(effect) => load_effect_from_yaml(
+                effect,
+                metadata,
+                functions,
+                registry,
+                &parameters,
+                &mut *local_variable_data,
+            )?,
             None => Effect::default(),
+        };
+        let mut model_data = ModelData {
+            metadata,
+            functions,
+            registry,
+            parameters: &parameters,
+            local_variable_data: &mut *local_variable_data,
         };
         let cost = match cost_type {
             CostType::Integer => {
                 let expression = match lifted_cost {
-                    Some(cost) => {
-                        parse_integer_from_yaml(cost, metadata, functions, registry, &parameters)?
-                    }
+                    Some(cost) => parse_integer_from_yaml(cost, &mut model_data)?,
                     None => expression::IntegerExpression::Cost,
                 };
                 CostExpression::Integer(expression.simplify(registry))
             }
             CostType::Continuous => {
                 let expression = match lifted_cost {
-                    Some(cost) => parse_continuous_from_yaml(
-                        cost,
-                        metadata,
-                        functions,
-                        registry,
-                        &parameters,
-                    )?,
+                    Some(cost) => parse_continuous_from_yaml(cost, &mut model_data)?,
                     None => expression::ContinuousExpression::Cost,
                 };
                 CostExpression::Continuous(expression.simplify(registry))
@@ -135,6 +156,7 @@ pub fn load_transitions_from_yaml(
             parameter_names: parameter_names.clone(),
             parameter_values,
             elements_in_set_variable,
+            elements_in_set_resource_variable,
             preconditions,
             effect,
             cost,
@@ -170,45 +192,51 @@ fn load_effect_from_yaml(
     functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<Effect, Box<dyn Error>> {
     let lifted_effects = util::get_map(value)?;
     let mut set_effects = Vec::new();
     let mut element_effects = Vec::new();
     let mut integer_effects = Vec::new();
     let mut continuous_effects = Vec::new();
+    let mut set_resource_effects = Vec::new();
     let mut element_resource_effects = Vec::new();
     let mut integer_resource_effects = Vec::new();
     let mut continuous_resource_effects = Vec::new();
     for (variable, effect) in lifted_effects {
         let variable = util::get_string(variable)?;
+        let mut model_data = ModelData {
+            metadata,
+            functions,
+            registry,
+            parameters,
+            local_variable_data: &mut *local_variable_data,
+        };
         if let Some(i) = metadata.name_to_set_variable.get(&variable) {
             let effect = util::get_string(effect)?;
-            let effect =
-                expression_parser::parse_set(effect, metadata, functions, registry, parameters)?;
+            let effect = expression_parser::parse_set(effect, &mut model_data)?;
             set_effects.push((*i, effect.simplify(registry)));
+        } else if let Some(i) = metadata.name_to_set_resource_variable.get(&variable) {
+            let effect = util::get_string(effect)?;
+            let effect = expression_parser::parse_set(effect, &mut model_data)?;
+            set_resource_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
-            let effect =
-                parse_element_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_element_from_yaml(effect, &mut model_data)?;
             element_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_element_resource_variable.get(&variable) {
-            let effect =
-                parse_element_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_element_from_yaml(effect, &mut model_data)?;
             element_resource_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
-            let effect =
-                parse_integer_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_integer_from_yaml(effect, &mut model_data)?;
             integer_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
-            let effect =
-                parse_integer_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_integer_from_yaml(effect, &mut model_data)?;
             integer_resource_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
-            let effect =
-                parse_continuous_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_continuous_from_yaml(effect, &mut model_data)?;
             continuous_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
-            let effect =
-                parse_continuous_from_yaml(effect, metadata, functions, registry, parameters)?;
+            let effect = parse_continuous_from_yaml(effect, &mut model_data)?;
             continuous_resource_effects.push((*i, effect.simplify(registry)));
         } else {
             return Err(util::YamlContentErr::new(format!("no such variable `{variable}`")).into());
@@ -216,9 +244,11 @@ fn load_effect_from_yaml(
     }
 
     set_effects.sort_unstable_by(|(i0, _), (i1, _)| i0.cmp(i1));
+    set_resource_effects.sort_unstable_by(|(i0, _), (i1, _)| i0.cmp(i1));
 
     Ok(Effect {
         set_effects,
+        set_resource_effects,
         element_effects,
         integer_effects,
         continuous_effects,
@@ -248,6 +278,14 @@ mod tests {
         let result = metadata.add_set_variable(String::from("s2"), ob);
         assert!(result.is_ok());
         let result = metadata.add_set_variable(String::from("s3"), ob);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable(String::from("sr0"), ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable(String::from("sr1"), ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable(String::from("sr2"), ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable(String::from("sr3"), ob, false);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
@@ -328,8 +366,14 @@ preconditions: [(>= (f2 0 1) 10)]
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -356,8 +400,14 @@ preconditions: [(>= (f2 0 1) 10)]
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -386,8 +436,14 @@ cost: 0
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -419,8 +475,14 @@ cost: 0
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -451,8 +513,14 @@ cost: '0'
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -485,8 +553,14 @@ forced: false
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -519,8 +593,14 @@ forced: true
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -553,8 +633,14 @@ direction: forward
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -587,8 +673,14 @@ direction: backward
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -630,8 +722,14 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![
             Transition {
@@ -748,8 +846,14 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_ok());
         let expected = vec![
             Transition {
@@ -905,6 +1009,53 @@ cost: (+ cost (f1 e))
     }
 
     #[test]
+    fn load_transition_sorts_set_resource_effects() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+        let transition = r"
+name: transition
+effect:
+        sr3: sr0
+        sr1: sr2
+        sr2: sr1
+        sr0: sr3
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition).unwrap();
+        let transitions = load_transitions_from_yaml(
+            &transition[0],
+            &metadata,
+            &functions,
+            &registry,
+            &CostType::Integer,
+            &mut LocalVariableData::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            transitions.0[0].effect.set_resource_effects,
+            vec![
+                (
+                    0,
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(3)),
+                ),
+                (
+                    1,
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(2)),
+                ),
+                (
+                    2,
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
+                ),
+                (
+                    3,
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+                ),
+            ]
+        );
+    }
+
+    #[test]
     fn load_transitions_from_yaml_err() {
         let metadata = create_metadata();
         let functions = StateFunctions::default();
@@ -929,8 +1080,14 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_err());
 
         let transition = r"
@@ -949,8 +1106,14 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_err());
 
         let transition = r"
@@ -973,8 +1136,14 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_err());
 
         let transition = r"
@@ -988,8 +1157,14 @@ forced: fasle
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_err());
 
         let transition = r"
@@ -1003,8 +1178,14 @@ direction: both
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        let transitions = load_transitions_from_yaml(
+            transition,
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(transitions.is_err());
     }
 
@@ -1031,7 +1212,14 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        let effect = load_effect_from_yaml(
+            effect,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &mut LocalVariableData::default(),
+        );
         assert!(effect.is_ok());
         let expected = Effect {
             set_effects: vec![(
@@ -1047,6 +1235,7 @@ direction: both
             element_resource_effects: vec![(0, ElementExpression::Constant(1))],
             integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
             continuous_effects: vec![(0, ContinuousExpression::Constant(1.0))],
+            set_resource_effects: vec![],
             continuous_resource_effects: vec![(0, ContinuousExpression::Constant(2.0))],
         };
         assert_eq!(effect.unwrap(), expected);
@@ -1075,7 +1264,14 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        let effect = load_effect_from_yaml(
+            effect,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &mut LocalVariableData::default(),
+        );
         assert!(effect.is_err());
 
         let effect = r"
@@ -1091,7 +1287,14 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        let effect = load_effect_from_yaml(
+            effect,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &mut LocalVariableData::default(),
+        );
         assert!(effect.is_err());
 
         let effect = r"
@@ -1108,7 +1311,14 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        let effect = load_effect_from_yaml(
+            effect,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &mut LocalVariableData::default(),
+        );
         assert!(effect.is_err());
 
         let effect = r"
@@ -1124,7 +1334,14 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        let effect = load_effect_from_yaml(
+            effect,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &mut LocalVariableData::default(),
+        );
         assert!(effect.is_err());
     }
 }

@@ -1,6 +1,7 @@
+use super::expression_parser::ModelData;
 use super::parse_expression_from_yaml;
 use crate::{dypdl_parser::state_parser, util};
-use dypdl::{StateFunctions, StateMetadata, TableRegistry};
+use dypdl::{LocalVariableData, StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -16,6 +17,7 @@ pub fn load_state_functions_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,
     registry: &TableRegistry,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<StateFunctions, Box<dyn Error>> {
     let array = util::get_array(value)?;
     let mut functions = StateFunctions::default();
@@ -38,6 +40,7 @@ pub fn load_state_functions_from_yaml(
                 registry,
                 &mut functions,
                 &mut reserved_names,
+                local_variable_data,
             )? {
                 changed = true;
             } else {
@@ -65,12 +68,14 @@ fn load_state_function(
     registry: &TableRegistry,
     functions: &mut StateFunctions,
     reserved_names: &mut FxHashSet<String>,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<bool, Box<dyn Error>> {
     let map = util::get_map(value)?;
     let name = util::get_string_by_key(map, "name")?;
     let function_type = util::get_string_by_key(map, "type")?;
     let expression = util::get_yaml_by_key(map, "expression")?;
     let state_function_backup = functions.clone();
+    let local_variable_data_backup = local_variable_data.clone();
 
     let mut name_set = FxHashSet::default();
 
@@ -89,75 +94,70 @@ fn load_state_function(
         }
 
         let parameters = FxHashMap::from_iter(parameters.into_iter());
+        let mut model_data = ModelData {
+            metadata,
+            functions,
+            registry,
+            parameters: &parameters,
+            local_variable_data,
+        };
 
         match &function_type[..] {
             "set" => {
-                if let Ok(expression) = parse_expression_from_yaml::parse_set_from_yaml(
-                    expression,
-                    metadata,
-                    functions,
-                    registry,
-                    &parameters,
-                ) {
-                    functions.add_set_function(name.clone(), expression)?;
+                if let Ok(expression) =
+                    parse_expression_from_yaml::parse_set_from_yaml(expression, &mut model_data)
+                {
+                    functions.add_set_function(name.clone(), expression.simplify(registry))?;
                 } else {
                     *functions = state_function_backup;
+                    *local_variable_data = local_variable_data_backup;
                     return Ok(false);
                 }
             }
             "element" => {
-                if let Ok(expression) = parse_expression_from_yaml::parse_element_from_yaml(
-                    expression,
-                    metadata,
-                    functions,
-                    registry,
-                    &parameters,
-                ) {
-                    functions.add_element_function(name.clone(), expression)?;
+                if let Ok(expression) =
+                    parse_expression_from_yaml::parse_element_from_yaml(expression, &mut model_data)
+                {
+                    functions.add_element_function(name.clone(), expression.simplify(registry))?;
                 } else {
                     *functions = state_function_backup;
+                    *local_variable_data = local_variable_data_backup;
                     return Ok(false);
                 }
             }
             "integer" => {
-                if let Ok(expression) = parse_expression_from_yaml::parse_integer_from_yaml(
-                    expression,
-                    metadata,
-                    functions,
-                    registry,
-                    &parameters,
-                ) {
-                    functions.add_integer_function(name.clone(), expression)?;
+                if let Ok(expression) =
+                    parse_expression_from_yaml::parse_integer_from_yaml(expression, &mut model_data)
+                {
+                    functions.add_integer_function(name.clone(), expression.simplify(registry))?;
                 } else {
                     *functions = state_function_backup;
+                    *local_variable_data = local_variable_data_backup;
                     return Ok(false);
                 }
             }
             "continuous" => {
                 if let Ok(expression) = parse_expression_from_yaml::parse_continuous_from_yaml(
                     expression,
-                    metadata,
-                    functions,
-                    registry,
-                    &parameters,
+                    &mut model_data,
                 ) {
-                    functions.add_continuous_function(name.clone(), expression)?;
+                    functions
+                        .add_continuous_function(name.clone(), expression.simplify(registry))?;
                 } else {
                     *functions = state_function_backup;
+                    *local_variable_data = local_variable_data_backup;
                     return Ok(false);
                 }
             }
             "bool" => {
                 if let Ok(expression) = parse_expression_from_yaml::parse_condition_from_yaml(
                     expression,
-                    metadata,
-                    functions,
-                    registry,
-                    &parameters,
+                    &mut model_data,
                 ) {
-                    functions.add_boolean_function(name.clone(), expression)?;
+                    functions.add_boolean_function(name.clone(), expression.simplify(registry))?;
                 } else {
                     *functions = state_function_backup;
+                    *local_variable_data = local_variable_data_backup;
                     return Ok(false);
                 }
             }
@@ -224,7 +224,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_ok());
         let functions = result.unwrap();
 
@@ -294,7 +299,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_ok());
         let functions = result.unwrap();
 
@@ -348,7 +358,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -388,7 +403,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -427,7 +447,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -466,7 +491,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -506,7 +536,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -545,7 +580,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -585,7 +625,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -625,7 +670,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -665,7 +715,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -708,7 +763,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -748,7 +808,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -791,7 +856,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -831,7 +901,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -874,7 +949,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -914,7 +994,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -957,7 +1042,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -1000,7 +1090,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -1046,7 +1141,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -1077,7 +1177,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_ok());
         let functions = result.unwrap();
 
@@ -1127,6 +1232,43 @@ mod tests {
     }
 
     #[test]
+    fn load_state_function_forward_reference_with_reduce_does_not_leak_local_variable() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let object = result.unwrap();
+        let result = metadata.add_set_variable("sv", object);
+        assert!(result.is_ok());
+
+        let mut registry = TableRegistry::default();
+        let result = registry.add_table_1d("it", vec![3i32, 2i32, 1i32, 0i32]);
+        assert!(result.is_ok());
+
+        // `sf_f` is declared before `sf_g`, which it forward-references inside a `reduce` body.
+        // The first parse attempt binds a local variable for `x` and then fails on the
+        // undefined `sf_g`, so `sf_f` is retried once `sf_g` is available. The retry binds `x`
+        // again; the first, discarded binding must not leak into `local_variable_data`.
+        let state_functions = r"
+    - name: sf_f
+      type: integer
+      expression: (reduce sum x sv (+ (it x) sf_g))
+    - name: sf_g
+      type: integer
+      expression: 1";
+
+        let yaml = YamlLoader::load_from_str(state_functions);
+        assert!(yaml.is_ok());
+        let yaml = &yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let mut local_variable_data = LocalVariableData::default();
+        let result =
+            load_state_functions_from_yaml(yaml, &metadata, &registry, &mut local_variable_data);
+        assert!(result.is_ok());
+        assert_eq!(local_variable_data.number_of_variables(), 1);
+    }
+
+    #[test]
     fn load_parameterized_state_function_err() {
         let mut metadata = StateMetadata::default();
         let result = metadata.add_object_type("object", 2);
@@ -1152,7 +1294,12 @@ mod tests {
         let yaml = &yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = load_state_functions_from_yaml(yaml, &metadata, &registry);
+        let result = load_state_functions_from_yaml(
+            yaml,
+            &metadata,
+            &registry,
+            &mut LocalVariableData::default(),
+        );
         assert!(result.is_err());
     }
 }

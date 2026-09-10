@@ -1,7 +1,5 @@
 use super::beam_search::BeamSearchParameters;
-use super::data_structure::{
-    exceed_bound, BfsNode, StateRegistry, TransitionWithId,
-};
+use super::data_structure::{exceed_bound, BfsNode, StateRegistry, TransitionWithId};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{SearchInput, Solution};
 use super::util;
@@ -278,8 +276,7 @@ where
         if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
             if exceed_bound(model, value, primal_bound) {
                 best_dual_bound = primal_bound;
-            } else if best_dual_bound.is_none_or(|bound| !exceed_bound(model, bound, Some(value)))
-            {
+            } else if best_dual_bound.is_none_or(|bound| !exceed_bound(model, bound, Some(value))) {
                 best_dual_bound = layer_dual_bound;
             }
         }

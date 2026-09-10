@@ -2,12 +2,13 @@ use super::super::arc_chain::ArcChain;
 use super::cost_node_message::CostNodeMessage;
 use super::search_node_message::SearchNodeMessage;
 use crate::search_algorithm::data_structure::{
-    CreateTransitionChain, StateInformation,
-    StateWithHashableSignatureVariables, TransitionWithId,
+    CreateTransitionChain, StateInformation, StateWithHashableSignatureVariables, TransitionWithId,
 };
 use crate::search_algorithm::{FNode, FNodeEvaluators};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, StateFunctionCache, Transition, TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, StateFunctionCache, Transition, TransitionInterface,
+};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
