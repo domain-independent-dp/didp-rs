@@ -255,7 +255,14 @@ where
 {
     /// Returns a new successor generator
     pub fn new(forced_transitions: Vec<U>, transitions: Vec<U>, backward: bool, model: R) -> Self {
-        let mut dominance_map = vec![Vec::new(); transitions.len()];
+        // Filtered generators keep the original model transition IDs. Size all
+        // ID-indexed buffers by the model, not the number of retained transitions.
+        let n_transitions = if backward {
+            model.backward_transitions.len()
+        } else {
+            model.forward_transitions.len()
+        };
+        let mut dominance_map = vec![Vec::new(); n_transitions];
         model
             .transition_dominance
             .iter()
@@ -270,8 +277,6 @@ where
                 assert!(dominance_map.len() > t1_id);
                 dominance_map[t1_id].push((t2_id, c));
             });
-        let n_transitions = transitions.len();
-
         SuccessorGenerator {
             forced_transitions,
             transitions,
@@ -589,6 +594,65 @@ mod tests {
                 },
             ],
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn filtered_transitions_with_dominance_keep_model_ids() {
+        for backward in [false, true] {
+            let mut model = Model::default();
+            let v = model.add_integer_variable("v", 0).unwrap();
+            let ids: Vec<_> = (0..5)
+                .map(|i| {
+                    let transition = Transition::new(format!("t{i}"));
+                    if backward {
+                        model.add_backward_transition(transition).unwrap()
+                    } else {
+                        model.add_forward_transition(transition).unwrap()
+                    }
+                })
+                .collect();
+            model.add_transition_dominance(&ids[0], &ids[1]).unwrap();
+            model.add_transition_dominance(&ids[3], &ids[2]).unwrap();
+            model
+                .add_transition_dominance_with_conditions(
+                    &ids[4],
+                    &ids[1],
+                    vec![Condition::comparison_i(ComparisonOperator::Ge, v, 1)],
+                )
+                .unwrap();
+            model
+                .add_transition_dominance_with_conditions(
+                    &ids[1],
+                    &ids[4],
+                    vec![Condition::comparison_i(ComparisonOperator::Ge, v, 2)],
+                )
+                .unwrap();
+            let model = Rc::new(model);
+            let original = SuccessorGenerator::<Transition>::from_model(model.clone(), backward);
+            let mut generator = SuccessorGenerator::new(
+                vec![],
+                [1, 3, 4].map(|i| original.transitions[i].clone()).to_vec(),
+                backward,
+                model.clone(),
+            );
+            let mut state = model.target.clone();
+            let mut cache = StateFunctionCache::new(&model.state_functions);
+            let mut result = Vec::new();
+
+            // Removed transitions cannot dominate retained ones. Conditions and
+            // cycles must still work with non-contiguous original transition IDs.
+            for (value, expected) in [(0, vec![1, 3, 4]), (1, vec![3, 4]), (2, vec![1, 3])] {
+                state.signature_variables.integer_variables[v.id()] = value;
+                cache.clear();
+                generator.generate_applicable_transitions(&state, &mut cache, &mut result);
+                assert_eq!(result.iter().map(|t| t.id).collect::<Vec<_>>(), expected);
+            }
+
+            let mut empty =
+                SuccessorGenerator::<Transition>::new(vec![], vec![], backward, model.clone());
+            empty.generate_applicable_transitions(&state, &mut cache, &mut result);
+            assert!(result.is_empty());
         }
     }
 

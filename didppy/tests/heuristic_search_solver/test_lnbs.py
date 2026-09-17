@@ -97,3 +97,49 @@ def test_hot_start():
 
     assert solution.cost == 1
     assert model.validate_forward(solution.transitions, solution.cost, quiet=True)
+
+
+@pytest.mark.parametrize("threads", [1, 2])
+@pytest.mark.parametrize("float_cost", [False, True])
+def test_transition_dominance_with_transition_mutex(threads, float_cost):
+    model = dp.Model(float_cost=float_cost)
+    obj = model.add_object_type(number=4)
+    remaining = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    model.add_base_case([remaining.is_empty()])
+    state_cost = dp.FloatExpr.state_cost() if float_cost else dp.IntExpr.state_cost()
+    transitions = []
+    ids = []
+    for i in range(4):
+        transition = dp.Transition(
+            name=f"remove {i}",
+            cost=state_cost + 1,
+            effects=[(remaining, remaining.remove(i))],
+            preconditions=[remaining.contains(i)],
+        )
+        ids.append(model.add_transition(transition))
+        transitions.append(transition)
+    expensive = dp.Transition(
+        name="expensive remove 3",
+        cost=state_cost + 2,
+        effects=[(remaining, remaining.remove(3))],
+        preconditions=[remaining.contains(3)],
+    )
+    expensive_id = model.add_transition(expensive)
+    model.add_transition_dominance(ids[3], expensive_id)
+    model.add_dual_bound(0)
+
+    # Start above the optimum so LNBS searches neighborhoods with fixed prefix
+    # and suffix transitions, leaving gaps in the retained transition IDs.
+    solution = dp.LNBS(
+        model,
+        time_limit=10,
+        quiet=True,
+        seed=2023,
+        threads=threads,
+        initial_solution=transitions[:3] + [expensive],
+    ).search()
+
+    assert solution.is_optimal
+    assert solution.cost == 4
+    assert solution.best_bound == 4
+    assert model.validate_forward(solution.transitions, solution.cost, quiet=True)
