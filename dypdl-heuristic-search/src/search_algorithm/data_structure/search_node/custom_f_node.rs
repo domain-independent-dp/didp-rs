@@ -23,9 +23,9 @@ pub struct CustomFNode<
     node: CostNode<T, TransitionWithId<TransitionWithCustomCost>, R, C, P>,
     /// Path cost computed with the custom transition costs.
     pub g: U,
-    /// Custom heuristic value, negated when the custom evaluation minimizes cost.
+    /// Custom heuristic value, negated when the custom evaluation minimizes cost, so it can be used as priority value for ordering.
     pub h: U,
-    /// Custom evaluation value, negated when the custom evaluation minimizes cost.
+    /// Custom evaluation value, negated when the custom evaluation minimizes cost, so it can be used as priority value for ordering.
     pub f: U,
 }
 
