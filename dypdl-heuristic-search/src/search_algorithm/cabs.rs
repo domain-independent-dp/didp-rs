@@ -175,7 +175,7 @@ where
         }
     }
 
-    //// Search for the next solution, returning the solution without converting it into `Transition`.
+    /// Searches for the next solution, retaining transition IDs, and returns whether search has terminated.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
         self.time_keeper.start();
         let model = &self.input.generator.model;

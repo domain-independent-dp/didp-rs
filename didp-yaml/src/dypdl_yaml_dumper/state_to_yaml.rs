@@ -140,7 +140,6 @@ mod tests {
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
             continuous_less_is_better: vec![false, true],
-            ..Default::default()
         }
     }
 
@@ -151,7 +150,6 @@ mod tests {
                 set_variables: vec![Set::with_capacity(10), Set::with_capacity(10)],
                 element_variables: vec![9, 8],
                 continuous_variables: vec![1.0, 1.1],
-                ..Default::default()
             },
             resource_variables: ResourceVariables {
                 set_variables: vec![Set::with_capacity(10), Set::with_capacity(10)],

@@ -1,6 +1,5 @@
-import pytest
-
 import didppy as dp
+import pytest
 
 error_cases = [
     ({"time_limit": 1800, "primal_bound": 1.5}, TypeError),
@@ -37,7 +36,7 @@ def test_panic():
     model.add_transition(t)
     model.add_dual_bound(0)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         dp.LNBS(model, time_limit=1800)
 
 

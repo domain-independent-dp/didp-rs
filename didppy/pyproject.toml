@@ -28,5 +28,8 @@ line_length = 88
 [tool.flake8]
 max-line-length = 88
 
+[tool.ruff]
+target-version = "py37"
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib", "--color=yes"]

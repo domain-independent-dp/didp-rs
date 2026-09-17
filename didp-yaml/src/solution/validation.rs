@@ -10,18 +10,33 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub enum SolutionError {
     /// A file could not be read.
-    Io { path: PathBuf, source: io::Error },
+    Io {
+        /// File that could not be read.
+        path: PathBuf,
+        /// Underlying I/O error.
+        source: io::Error,
+    },
     /// Invalid YAML or an unresolved transition, with a path into the document.
-    Format { path: String, message: String },
+    Format {
+        /// Location of the invalid value in the YAML document.
+        path: String,
+        /// Reason the value is invalid.
+        message: String,
+    },
     /// A solution is infeasible or an expression cannot be evaluated.
     Validation(SolutionValidationError),
     /// The declared objective differs from the independently computed objective.
     CostMismatch {
+        /// Objective value supplied with the solution.
         declared: SolutionCost,
+        /// Objective value computed by replaying the solution.
         computed: SolutionCost,
     },
     /// The declared objective has the wrong type for the model.
-    CostTypeMismatch { expected: CostType },
+    CostTypeMismatch {
+        /// Cost type required by the model or computed cost.
+        expected: CostType,
+    },
     /// A tolerance is negative or non-finite.
     InvalidTolerance,
 }

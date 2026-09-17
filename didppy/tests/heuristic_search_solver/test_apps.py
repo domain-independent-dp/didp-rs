@@ -1,7 +1,6 @@
 import didppy as dp
 import pytest
 
-
 error_cases = [
     ({"primal_bound": 1.5}, TypeError),
     ({"time_limit": -1}, BaseException),
@@ -59,7 +58,7 @@ def test_search_panic():
     model.add_dual_bound(0)
     solver = dp.APPS(model)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search()
 
 
@@ -96,5 +95,5 @@ def test_search_next_panic():
     model.add_dual_bound(0)
     solver = dp.APPS(model)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search_next()

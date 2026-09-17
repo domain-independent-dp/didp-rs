@@ -1150,7 +1150,7 @@ cost: (+ cost (f1 e))
 name: transition
 effect: {e0: '0'}
 cost: '0'
-forced: fasle
+forced: not-a-boolean
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
         assert!(transition.is_ok());

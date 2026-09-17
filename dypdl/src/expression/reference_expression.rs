@@ -24,7 +24,7 @@ impl<T: Clone> ReferenceExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(
         &self,
         registry: &TableRegistry,
@@ -45,7 +45,7 @@ impl ReferenceExpression<Set> {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     pub fn eval<'a, S: StateInterface>(
         &'a self,
         state: &'a S,

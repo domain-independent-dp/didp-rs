@@ -6,6 +6,8 @@ pub struct LocalEnvironment {
 
 impl LocalEnvironment {
     /// Sets the value of a local element variable.
+    ///
+    /// Returns its previous value, or `None` if it was not bound.
     pub fn set(&mut self, id: usize, value: usize) -> Option<usize> {
         if id >= self.id_to_value.len() {
             self.id_to_value.resize(id + 1, None);
@@ -18,6 +20,8 @@ impl LocalEnvironment {
     }
 
     /// Unsets the value of a local element variable.
+    ///
+    /// Returns its previous value, or `None` if it was not bound.
     pub fn unset(&mut self, id: usize) -> Option<usize> {
         if id >= self.id_to_value.len() {
             None
@@ -30,6 +34,8 @@ impl LocalEnvironment {
     }
 
     /// Gets the value of a local element variable.
+    ///
+    /// Returns `None` if the variable is not bound.
     pub fn get(&self, id: usize) -> Option<usize> {
         if id >= self.id_to_value.len() {
             None

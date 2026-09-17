@@ -5628,9 +5628,9 @@ fn check_no_connected_with_edges(connected: &Option<BoolTable2DPy>) -> PyResult<
 
 /// Condition.
 ///
-/// The negation of a condition can be crated by :code:`~x`.
-/// The conjunction of two conditions can be crated by :code:`x & y`.
-/// The disjunction of two conditions can be crated by :code:`x | y`.
+/// The negation of a condition can be created by :code:`~x`.
+/// The conjunction of two conditions can be created by :code:`x & y`.
+/// The disjunction of two conditions can be created by :code:`x | y`.
 ///
 /// Parameters
 /// ----------

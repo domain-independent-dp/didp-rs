@@ -1,7 +1,9 @@
 use super::*;
 use crate::variable_type::{Element, Numeric, Set};
 
+/// Replaces free occurrences of a local variable while respecting nested binders.
 pub(super) trait SubstituteLocalVariable: Sized {
+    /// Substitutes `value` for `id`, leaving occurrences shadowed by a binder unchanged.
     fn substitute_local_variable(&self, id: usize, value: Element) -> Self;
 }
 

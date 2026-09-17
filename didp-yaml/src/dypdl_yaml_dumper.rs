@@ -1,3 +1,5 @@
+//! Conversion of DyPDL models to YAML domain and problem documents.
+
 use dypdl::expression::Condition;
 use dypdl::{CostType, Model, ReduceFunction};
 use state_to_yaml::state_to_yaml;
@@ -24,6 +26,11 @@ use transition_dominance_to_yaml::transition_dominance_to_yaml;
 use transition_to_yaml::transition_to_yaml;
 use variable_to_yaml::*;
 
+/// Converts a model into its domain and problem YAML documents, in that order.
+///
+/// # Errors
+///
+/// Returns an error if a model expression cannot be represented in YAML.
 pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     let mut domain_hash = Hash::new();
     let mut problem_hash = Hash::new();
@@ -337,6 +344,11 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     Ok((Yaml::Hash(domain_hash), Yaml::Hash(problem_hash)))
 }
 
+/// Serializes a model into domain and problem YAML strings, in that order.
+///
+/// # Errors
+///
+/// Returns an error if a model expression cannot be represented in YAML.
 pub fn dump_model(model: &Model) -> Result<(String, String), Box<dyn Error>> {
     let (domain_yaml, problem_yaml) = model_to_yaml(model)?;
 

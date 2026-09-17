@@ -1,3 +1,5 @@
+//! Command-line validation of a solution against a DyPDL model in YAML format.
+
 use didp_yaml::dypdl_parser::load_model_from_yaml;
 use didp_yaml::solution::{
     load_solution_from_file, validate_solution, CostTolerance, SolutionError,

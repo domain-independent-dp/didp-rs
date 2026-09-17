@@ -2,6 +2,7 @@ use crate::variable_type::Set;
 use ordered_float::OrderedFloat;
 use std::ops::Add;
 
+/// Sorts `(value, weight)` pairs by increasing weight-to-value ratio.
 pub fn sort_fractional_knapsack_items<I>(items: I) -> Vec<(f64, f64)>
 where
     I: IntoIterator<Item = (f64, f64)>,
@@ -11,6 +12,7 @@ where
     sorted_items
 }
 
+/// Sorts `(item index, value, weight)` tuples by increasing weight-to-value ratio.
 pub fn sort_fractional_knapsack_items_with_indices<I>(items: I) -> Vec<(usize, f64, f64)>
 where
     I: IntoIterator<Item = (usize, f64, f64)>,
@@ -20,6 +22,7 @@ where
     sorted_items
 }
 
+/// Computes the fractional knapsack value from `(value, weight)` pairs.
 pub fn compute_fractional_knapsack<I>(capacity: f64, items: I) -> f64
 where
     I: Iterator<Item = (f64, f64)>,
@@ -29,6 +32,8 @@ where
     compute_fractional_knapsack_sorted(capacity, sorted_items.into_iter())
 }
 
+/// Computes the fractional knapsack value from pairs sorted by increasing weight-to-value ratio.
+/// The first item that exceeds the remaining capacity is taken fractionally.
 pub fn compute_fractional_knapsack_sorted<I>(capacity: f64, sorted_items: I) -> f64
 where
     I: Iterator<Item = (f64, f64)>,
@@ -53,6 +58,12 @@ where
     total_value
 }
 
+/// Computes a minimum spanning tree over `nodes`, using callbacks for edge weights and connectivity.
+/// Each pair of nodes uses the cheaper available direction, ordered by `key`.
+///
+/// # Panics
+///
+/// Panics if the selected nodes cannot be connected.
 pub fn compute_minimum_spanning_tree_with_connectivity<T, K, F, C, G>(
     nodes: &Set,
     edge_weight: F,
@@ -102,6 +113,7 @@ where
     sort_minimum_spanning_tree_edges(edges, key)
 }
 
+/// Sorts `(source, target, weight)` edges by the key computed from each weight.
 pub fn sort_minimum_spanning_tree_edges<T, K, I, G>(edges: I, mut key: G) -> Vec<(usize, usize, T)>
 where
     T: Copy,
@@ -114,6 +126,8 @@ where
     edges
 }
 
+/// Builds sorted undirected edges from a square weight matrix and a connectivity predicate.
+/// Each pair of nodes uses the cheaper available direction, ordered by `key`.
 pub fn sort_minimum_spanning_tree_edges_with_connectivity<T, K, F, G>(
     matrix: &[Vec<T>],
     mut connected: F,
@@ -142,6 +156,12 @@ where
     sort_minimum_spanning_tree_edges(edges, key)
 }
 
+/// Computes a minimum spanning tree using edges sorted by increasing weight.
+/// Edges with an endpoint outside `nodes` are ignored; `T::default()` must be zero.
+///
+/// # Panics
+///
+/// Panics if the selected nodes cannot be connected.
 pub fn compute_minimum_spanning_tree_from_sorted_edges<T, I>(nodes: &Set, sorted_edges: I) -> T
 where
     T: Add<Output = T> + Copy + Default,

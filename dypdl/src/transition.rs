@@ -69,7 +69,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -111,7 +111,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     /// # Examples
     ///
     /// ```
@@ -160,7 +160,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &table_registry::TableRegistry) -> CostExpression {
         match self {
             Self::Integer(expression) => Self::Integer(expression.simplify(registry)),
@@ -205,7 +205,7 @@ pub trait TransitionInterface {
 pub struct Transition {
     /// Name of the transition.
     pub name: String,
-    //// Names of parameters.
+    /// Names of parameters.
     pub parameter_names: Vec<String>,
     /// The values of parameters.
     pub parameter_values: Vec<Element>,
@@ -228,7 +228,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -289,7 +289,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -323,7 +323,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///

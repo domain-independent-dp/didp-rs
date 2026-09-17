@@ -35,6 +35,7 @@ pub enum ElementExpression {
         Box<ElementExpression>,
         Box<ElementExpression>,
     ),
+    /// Index of a local variable bound by a higher-order expression.
     LocalVariable(usize),
 }
 
@@ -586,6 +587,13 @@ impl ElementExpression {
         )
     }
 
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
     pub fn eval_with_local_environment<T: StateInterface>(
         &self,
         state: &T,
@@ -776,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    fn elment_default() {
+    fn element_default() {
         assert_eq!(ElementExpression::default(), ElementExpression::Constant(0));
     }
 

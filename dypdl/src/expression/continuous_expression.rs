@@ -104,24 +104,32 @@ pub enum ContinuousExpression {
         Box<Condition>,
         Box<ContinuousExpression>,
     ),
+    /// Fractional knapsack value for a set of items and a capacity expression,
+    /// using `(item, value, weight)` tuples sorted by increasing weight-to-value ratio.
     FractionalKnapsackSorted(
         Box<SetExpression>,
         Box<ContinuousExpression>,
         Vec<(usize, Continuous, Continuous)>,
     ),
+    /// Fractional knapsack value for a set of items and a capacity expression,
+    /// using `(item, value expression, weight expression)` tuples.
     FractionalKnapsack(
         Box<SetExpression>,
         Box<ContinuousExpression>,
         Vec<(usize, ContinuousExpression, ContinuousExpression)>,
     ),
+    /// Fractional knapsack value using integer value and weight table indices.
     FractionalKnapsackIntegerTable(Box<SetExpression>, Box<ContinuousExpression>, usize, usize),
+    /// Fractional knapsack value using continuous value and weight table indices.
     FractionalKnapsackContinuousTable(Box<SetExpression>, Box<ContinuousExpression>, usize, usize),
+    /// Fractional knapsack value using an integer value table and a continuous weight table.
     FractionalKnapsackIntegerValueContinuousWeightTable(
         Box<SetExpression>,
         Box<ContinuousExpression>,
         usize,
         usize,
     ),
+    /// Fractional knapsack value using a continuous value table and an integer weight table.
     FractionalKnapsackContinuousValueIntegerWeightTable(
         Box<SetExpression>,
         Box<ContinuousExpression>,
@@ -219,7 +227,7 @@ impl From<IntegerResourceVariable> for ContinuousExpression {
 }
 
 impl ContinuousExpression {
-    /// Returns an expression representing the abstract value.
+    /// Returns an expression representing the absolute value.
     ///
     /// # Examples
     ///
@@ -2762,6 +2770,13 @@ impl ContinuousExpression {
         )
     }
 
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
     #[inline]
     pub fn eval_with_local_environment<U: StateInterface>(
         &self,
@@ -2831,6 +2846,11 @@ impl ContinuousExpression {
         )
     }
 
+    /// Evaluates a cost expression using the supplied successor cost and local variable bindings.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval_cost`], or if a referenced local variable is unbound.
     #[inline]
     pub fn eval_cost_with_local_environment<U: StateInterface>(
         &self,
@@ -3076,29 +3096,30 @@ impl ContinuousExpression {
                     registry,
                 );
 
+                // Both evaluations borrow the same mutable cache, so keep them in one closure.
                 let edges = edges.iter().filter_map(|(i, j, weight, condition)| {
-                    condition
-                        .eval_with_local_environment(
-                            state,
-                            function_cache,
-                            local_environment,
-                            state_functions,
-                            registry,
-                        )
-                        .then(|| {
-                            (
-                                *i,
-                                *j,
-                                weight.eval_inner(
-                                    cost,
-                                    state,
-                                    function_cache,
-                                    local_environment,
-                                    state_functions,
-                                    registry,
-                                ),
-                            )
-                        })
+                    if condition.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ) {
+                        Some((
+                            *i,
+                            *j,
+                            weight.eval_inner(
+                                cost,
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            ),
+                        ))
+                    } else {
+                        None
+                    }
                 });
 
                 algorithms::compute_minimum_spanning_tree_from_sorted_edges(

@@ -15,46 +15,70 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SolutionValidationError {
     /// The requested Rust cost type does not match the model.
-    CostTypeMismatch { expected: CostType },
+    CostTypeMismatch {
+        /// Cost type required by the model.
+        expected: CostType,
+    },
     /// The transition is not a registered forward transition, even after simplification.
     UnknownTransition {
+        /// Zero-based position in the solution's transition sequence.
         transition_index: usize,
+        /// Name of the unregistered transition.
         transition_name: String,
     },
     /// A transition ID is backward or does not resolve in the supplied model.
     InvalidTransitionId {
+        /// Zero-based position in the solution's transition sequence.
         transition_index: usize,
+        /// ID that could not be resolved to a forward transition.
         transition_id: TransitionId,
+        /// Reason the ID is invalid.
         message: String,
     },
     /// A transition contains an invalid expression or variable reference.
     InvalidTransition {
+        /// Zero-based position in the solution's transition sequence.
         transition_index: usize,
+        /// Name of the invalid transition.
         transition_name: String,
+        /// Reason the transition is invalid.
         message: String,
     },
     /// A base state was reached with transitions remaining.
     EarlyBaseState {
+        /// Number of transitions applied before reaching the base state.
         state_index: usize,
+        /// Number of transitions remaining after the base state.
         remaining_transitions: usize,
     },
     /// A transition's precondition or parameter membership requirement failed.
     TransitionNotApplicable {
+        /// Zero-based position in the solution's transition sequence.
         transition_index: usize,
+        /// Name of the inapplicable transition.
         transition_name: String,
+        /// Failed precondition or parameter membership requirement.
         reason: String,
     },
     /// A state constraint failed.
     StateConstraintViolation {
+        /// Number of transitions applied before reaching the invalid state.
         state_index: usize,
+        /// Zero-based index of the violated state constraint in the model.
         constraint_index: usize,
     },
     /// The last state is not a base state.
-    NotBaseState { state_index: usize },
+    NotBaseState {
+        /// Number of transitions applied to reach the final state.
+        state_index: usize,
+    },
     /// An expression panicked during evaluation, or produced a non-finite cost.
     EvaluationError {
+        /// Number of transitions applied to reach the state being evaluated.
         state_index: usize,
+        /// Description of the expression being evaluated.
         context: String,
+        /// Evaluation failure or panic message.
         message: String,
     },
 }

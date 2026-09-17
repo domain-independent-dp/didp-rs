@@ -1,3 +1,5 @@
+//! Python bindings for DyPDL models and domain-independent dynamic programming solvers.
+
 use pyo3::prelude::*;
 
 mod heuristic_search_solver;

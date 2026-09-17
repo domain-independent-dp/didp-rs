@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import didppy as dp
 import pytest
 
@@ -15,10 +17,10 @@ def test_element_expr_raise():
 
 
 def test_element_expr_bool_raise():
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(dp.ElementExpr(3))
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if dp.ElementExpr(1):
             pass
 
@@ -27,7 +29,7 @@ def test_element_expr_eval_raise():
     model = dp.Model()
     state = model.target_state
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="called `Option::unwrap"):
         (dp.IntExpr.state_cost() > 0).if_then_else(
             dp.ElementExpr(0), dp.ElementExpr(1)
         ).eval(state, model)
@@ -47,10 +49,10 @@ def test_element_var_bool_raise():
     obj = model.add_object_type(number=4)
     var = model.add_element_var(object_type=obj, target=3)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -69,10 +71,10 @@ def test_element_resource_var_bool_raise():
     obj = model.add_object_type(number=4)
     var = model.add_element_resource_var(object_type=obj, target=3)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -95,7 +97,7 @@ class TestElementBinaryOperator:
 
     state = model.target_state
 
-    add_cases = []
+    add_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -106,7 +108,7 @@ class TestElementBinaryOperator:
     def test_add(self, lhs, rhs, expected):
         assert (lhs + rhs).eval(self.state, self.model) == expected
 
-    sub_cases = []
+    sub_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -117,7 +119,7 @@ class TestElementBinaryOperator:
     def test_sub(self, lhs, rhs, expected):
         assert (lhs - rhs).eval(self.state, self.model) == expected
 
-    mul_cases = []
+    mul_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -128,7 +130,7 @@ class TestElementBinaryOperator:
     def test_mul(self, lhs, rhs, expected):
         assert (lhs * rhs).eval(self.state, self.model) == expected
 
-    truediv_cases = []
+    truediv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -139,7 +141,7 @@ class TestElementBinaryOperator:
     def test_truediv(self, lhs, rhs, expected):
         assert (lhs / rhs).eval(self.state, self.model) == expected
 
-    floordiv_cases = []
+    floordiv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -150,7 +152,7 @@ class TestElementBinaryOperator:
     def test_floordiv(self, lhs, rhs, expected):
         assert (lhs // rhs).eval(self.state, self.model) == expected
 
-    mod_cases = []
+    mod_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -161,7 +163,7 @@ class TestElementBinaryOperator:
     def test_mod(self, lhs, rhs, expected):
         assert (lhs % rhs).eval(self.state, self.model) == expected
 
-    lt_cases = [
+    lt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -175,7 +177,7 @@ class TestElementBinaryOperator:
     def test_lt(self, lhs, rhs, expected):
         assert (lhs < rhs).eval(self.state, self.model) == expected
 
-    le_cases = [
+    le_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -189,7 +191,7 @@ class TestElementBinaryOperator:
     def test_le(self, lhs, rhs, expected):
         assert (lhs <= rhs).eval(self.state, self.model) == expected
 
-    eq_cases = [
+    eq_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -202,7 +204,7 @@ class TestElementBinaryOperator:
     def test_eq(self, lhs, rhs, expected):
         assert (lhs == rhs).eval(self.state, self.model) == expected
 
-    ne_cases = [
+    ne_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -215,7 +217,7 @@ class TestElementBinaryOperator:
     def test_ne(self, lhs, rhs, expected):
         assert (lhs != rhs).eval(self.state, self.model) == expected
 
-    ge_cases = [
+    ge_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -229,7 +231,7 @@ class TestElementBinaryOperator:
     def test_ge(self, lhs, rhs, expected):
         assert (lhs >= rhs).eval(self.state, self.model) == expected
 
-    gt_cases = [
+    gt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -271,10 +273,10 @@ def test_set_expr_bool_raise():
     const = model.create_set_const(object_type=obj, value=[])
     expr = dp.SetExpr(const)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(expr)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if expr:
             pass
 
@@ -285,7 +287,7 @@ def test_set_expr_eval_raise():
     const = model.create_set_const(object_type=obj, value=[0, 1])
     state = model.target_state
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="called `Option::unwrap"):
         (dp.IntExpr.state_cost() > 0).if_then_else(
             dp.SetExpr(const), dp.SetExpr(const)
         ).eval(state, model)
@@ -305,10 +307,10 @@ def test_set_const_bool_raise():
     obj = model.add_object_type(number=4)
     const = model.create_set_const(object_type=obj, value=[])
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(const)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if const:
             pass
 
@@ -328,10 +330,10 @@ def test_set_var_bool_raise():
     obj = model.add_object_type(number=4)
     var = model.add_set_var(object_type=obj, target=[])
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -353,10 +355,10 @@ def test_set_resource_var_bool_raise():
     obj = model.add_object_type(number=4)
     var = model.add_set_resource_var(object_type=obj, target=[], less_is_better=False)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -556,7 +558,7 @@ class TestSetBinaryOperator:
 
     state = model.target_state
 
-    or_cases = []
+    or_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -579,7 +581,7 @@ class TestSetBinaryOperator:
     def test_union(self, lhs, rhs, expected):
         assert lhs.union(rhs).eval(self.state, self.model) == expected
 
-    sub_cases = []
+    sub_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -602,7 +604,7 @@ class TestSetBinaryOperator:
     def test_difference(self, lhs, rhs, expected):
         assert lhs.difference(rhs).eval(self.state, self.model) == expected
 
-    and_cases = []
+    and_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -625,7 +627,7 @@ class TestSetBinaryOperator:
     def test_intersection(self, lhs, rhs, expected):
         assert lhs.intersection(rhs).eval(self.state, self.model) == expected
 
-    xor_cases = []
+    xor_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -648,7 +650,9 @@ class TestSetBinaryOperator:
     def test_symmetric_difference(self, lhs, rhs, expected):
         assert lhs.symmetric_difference(rhs).eval(self.state, self.model) == expected
 
-    lt_cases = [(value, value, False) for value in [const, expr, var, res_var]]
+    lt_cases: ClassVar = [
+        (value, value, False) for value in [const, expr, var, res_var]
+    ]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -671,7 +675,7 @@ class TestSetBinaryOperator:
     def test_lt(self, lhs, rhs, expected):
         assert (lhs < rhs).eval(self.state, self.model) == expected
 
-    le_cases = [(value, value, True) for value in [const, expr, var, res_var]]
+    le_cases: ClassVar = [(value, value, True) for value in [const, expr, var, res_var]]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -698,7 +702,7 @@ class TestSetBinaryOperator:
     def test_issubset(self, lhs, rhs, expected):
         assert lhs.issubset(rhs).eval(self.state, self.model) == expected
 
-    eq_cases = [(value, value, True) for value in [const, expr, var, res_var]]
+    eq_cases: ClassVar = [(value, value, True) for value in [const, expr, var, res_var]]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -721,7 +725,9 @@ class TestSetBinaryOperator:
     def test_eq(self, lhs, rhs, expected):
         assert (lhs == rhs).eval(self.state, self.model) == expected
 
-    ne_cases = [(value, value, False) for value in [const, expr, var, res_var]]
+    ne_cases: ClassVar = [
+        (value, value, False) for value in [const, expr, var, res_var]
+    ]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -744,7 +750,7 @@ class TestSetBinaryOperator:
     def test_ne(self, lhs, rhs, expected):
         assert (lhs != rhs).eval(self.state, self.model) == expected
 
-    ge_cases = [(value, value, True) for value in [const, expr, var, res_var]]
+    ge_cases: ClassVar = [(value, value, True) for value in [const, expr, var, res_var]]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -771,7 +777,9 @@ class TestSetBinaryOperator:
     def test_issuperset(self, lhs, rhs, expected):
         assert lhs.issuperset(rhs).eval(self.state, self.model) == expected
 
-    gt_cases = [(value, value, False) for value in [const, expr, var, res_var]]
+    gt_cases: ClassVar = [
+        (value, value, False) for value in [const, expr, var, res_var]
+    ]
 
     for value in [const, expr, var, res_var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -824,7 +832,7 @@ class TestSetElementOperator:
 
     state = model.target_state
 
-    add_cases = []
+    add_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -844,7 +852,7 @@ class TestSetElementOperator:
     def test_add(self, value, element, expected):
         assert value.add(element).eval(self.state, self.model) == expected
 
-    discard_cases = []
+    discard_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -868,7 +876,7 @@ class TestSetElementOperator:
     def test_remove(self, value, element, expected):
         assert value.remove(element).eval(self.state, self.model) == expected
 
-    contains_cases = []
+    contains_cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -905,7 +913,7 @@ class TestSetIsdisjoint:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for value in [const, expr, var, res_var]:
         cases.append((value, overlap_const, False))
@@ -947,10 +955,10 @@ class TestLocalVar:
             model.get_local_var("x")
 
     def test_bool_raise(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="cannot be converted to bool"):
             bool(self.x)
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="cannot be converted to bool"):
             if self.x:
                 pass
 
@@ -1064,7 +1072,7 @@ class TestSetReduce:
     x = model.add_local_var()
     state = model.target_state
 
-    values = [const, expr, var, res_var]
+    values: ClassVar = [const, expr, var, res_var]
 
     @pytest.mark.parametrize("value", values)
     def test_filter(self, value):
@@ -1218,16 +1226,17 @@ class TestSetReduce:
         )
 
     def test_max_empty_set_raise(self):
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="reduce performed on an empty set"):
             self.var.filter(self.x, self.x > 100).max(
                 self.x, self.int_table[self.x]
             ).eval(self.state, self.model)
 
     def test_min_empty_set_raise(self):
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="reduce performed on an empty set"):
             self.var.filter(self.x, self.x > 100).min(
                 self.x, self.int_table[self.x]
             ).eval(self.state, self.model)
+
 
 int_expr_cases = [(3, 3), (-3, -3)]
 
@@ -1244,10 +1253,10 @@ def test_int_expr(value, expected):
 def test_int_expr_bool_raise():
     expr = dp.IntExpr(1)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(expr)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if expr:
             pass
 
@@ -1256,10 +1265,10 @@ def test_int_var_bool_raise():
     model = dp.Model()
     var = model.add_int_var(target=1)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -1268,10 +1277,10 @@ def test_int_resource_var_bool_raise():
     model = dp.Model()
     var = model.add_int_resource_var(target=1)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -1280,7 +1289,7 @@ def test_int_expr_eval_raise():
     model = dp.Model()
     state = model.target_state
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="called `Option::unwrap"):
         dp.IntExpr.state_cost().eval(state, model)
 
 
@@ -1374,7 +1383,7 @@ class TestIntBinaryOperator:
 
     state = model.target_state
 
-    add_cases = []
+    add_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1385,7 +1394,7 @@ class TestIntBinaryOperator:
     def test_add(self, lhs, rhs, expected):
         assert (lhs + rhs).eval(self.state, self.model) == expected
 
-    sub_cases = []
+    sub_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1396,7 +1405,7 @@ class TestIntBinaryOperator:
     def test_sub(self, lhs, rhs, expected):
         assert (lhs - rhs).eval(self.state, self.model) == expected
 
-    mul_cases = []
+    mul_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1407,7 +1416,7 @@ class TestIntBinaryOperator:
     def test_mul(self, lhs, rhs, expected):
         assert (lhs * rhs).eval(self.state, self.model) == expected
 
-    mod_cases = []
+    mod_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1418,7 +1427,7 @@ class TestIntBinaryOperator:
     def test_mod(self, lhs, rhs, expected):
         assert (lhs % rhs).eval(self.state, self.model) == expected
 
-    truediv_cases = []
+    truediv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1429,7 +1438,7 @@ class TestIntBinaryOperator:
     def test_truediv(self, lhs, rhs, expected):
         assert (lhs / rhs).eval(self.state, self.model) == expected
 
-    floordiv_cases = []
+    floordiv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1440,7 +1449,7 @@ class TestIntBinaryOperator:
     def test_floordiv(self, lhs, rhs, expected):
         assert (lhs // rhs).eval(self.state, self.model) == expected
 
-    pow_cases = []
+    pow_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1455,7 +1464,7 @@ class TestIntBinaryOperator:
     def test_pow(self, lhs, rhs, expected):
         assert pow(lhs, rhs).eval(self.state, self.model) == expected
 
-    pow_modulo_cases = []
+    pow_modulo_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -1469,7 +1478,7 @@ class TestIntBinaryOperator:
     def test_pow_modulo(self, lhs, rhs, modulo, expected):
         assert pow(lhs, rhs, modulo).eval(self.state, self.model) == expected
 
-    lt_cases = [
+    lt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1483,7 +1492,7 @@ class TestIntBinaryOperator:
     def test_lt(self, lhs, rhs, expected):
         assert (lhs < rhs).eval(self.state, self.model) == expected
 
-    le_cases = [
+    le_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1497,7 +1506,7 @@ class TestIntBinaryOperator:
     def test_le(self, lhs, rhs, expected):
         assert (lhs <= rhs).eval(self.state, self.model) == expected
 
-    eq_cases = [
+    eq_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1510,7 +1519,7 @@ class TestIntBinaryOperator:
     def test_eq(self, lhs, rhs, expected):
         assert (lhs == rhs).eval(self.state, self.model) == expected
 
-    ne_cases = [
+    ne_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1523,7 +1532,7 @@ class TestIntBinaryOperator:
     def test_ne(self, lhs, rhs, expected):
         assert (lhs != rhs).eval(self.state, self.model) == expected
 
-    ge_cases = [
+    ge_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1537,7 +1546,7 @@ class TestIntBinaryOperator:
     def test_ge(self, lhs, rhs, expected):
         assert (lhs >= rhs).eval(self.state, self.model) == expected
 
-    gt_cases = [
+    gt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -1572,17 +1581,17 @@ def test_float_expr_eval_raise():
     model = dp.Model()
     state = model.target_state
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="called `Option::unwrap"):
         dp.FloatExpr.state_cost().eval(state, model)
 
 
 def test_float_expr_bool_raise():
     expr = dp.FloatExpr(1.5)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(expr)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if expr:
             pass
 
@@ -1591,10 +1600,10 @@ def test_float_var_bool_raise():
     model = dp.Model()
     var = model.add_float_var(target=1.5)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -1603,10 +1612,10 @@ def test_float_resource_var_bool_raise():
     model = dp.Model()
     var = model.add_float_resource_var(target=1.5)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(var)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if var:
             pass
 
@@ -1838,7 +1847,7 @@ class TestFloatBinaryOperator:
 
     state = model.target_state
 
-    add_cases = []
+    add_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1855,7 +1864,7 @@ class TestFloatBinaryOperator:
     def test_add(self, lhs, rhs, expected):
         assert (lhs + rhs).eval(self.state, self.model) == expected
 
-    sub_cases = []
+    sub_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1872,7 +1881,7 @@ class TestFloatBinaryOperator:
     def test_sub(self, lhs, rhs, expected):
         assert (lhs - rhs).eval(self.state, self.model) == expected
 
-    mul_cases = []
+    mul_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1889,7 +1898,7 @@ class TestFloatBinaryOperator:
     def test_mul(self, lhs, rhs, expected):
         assert (lhs * rhs).eval(self.state, self.model) == expected
 
-    mod_cases = []
+    mod_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1910,7 +1919,7 @@ class TestFloatBinaryOperator:
     def test_mod(self, lhs, rhs, expected):
         assert (lhs % rhs).eval(self.state, self.model) == expected
 
-    truediv_cases = []
+    truediv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1931,7 +1940,7 @@ class TestFloatBinaryOperator:
     def test_truediv(self, lhs, rhs, expected):
         assert (lhs / rhs).eval(self.state, self.model) == expected
 
-    floordiv_cases = []
+    floordiv_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1952,7 +1961,7 @@ class TestFloatBinaryOperator:
     def test_floordiv(self, lhs, rhs, expected):
         assert (lhs // rhs).eval(self.state, self.model) == expected
 
-    pow_cases = []
+    pow_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1977,7 +1986,7 @@ class TestFloatBinaryOperator:
     def test_pow(self, lhs, rhs, expected):
         assert pow(lhs, rhs).eval(self.state, self.model) == expected
 
-    pow_modulo_cases = []
+    pow_modulo_cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -1992,7 +2001,7 @@ class TestFloatBinaryOperator:
     def test_pow_modulo(self, lhs, rhs, modulo, expected):
         assert pow(lhs, rhs, modulo).eval(self.state, self.model) == expected
 
-    lt_cases = [
+    lt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2012,7 +2021,7 @@ class TestFloatBinaryOperator:
     def test_lt(self, lhs, rhs, expected):
         assert (lhs < rhs).eval(self.state, self.model) == expected
 
-    le_cases = [
+    le_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2032,7 +2041,7 @@ class TestFloatBinaryOperator:
     def test_le(self, lhs, rhs, expected):
         assert (lhs <= rhs).eval(self.state, self.model) == expected
 
-    eq_cases = [
+    eq_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2051,7 +2060,7 @@ class TestFloatBinaryOperator:
     def test_eq(self, lhs, rhs, expected):
         assert (lhs == rhs).eval(self.state, self.model) == expected
 
-    ne_cases = [
+    ne_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2070,7 +2079,7 @@ class TestFloatBinaryOperator:
     def test_ne(self, lhs, rhs, expected):
         assert (lhs != rhs).eval(self.state, self.model) == expected
 
-    ge_cases = [
+    ge_cases: ClassVar = [
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2090,7 +2099,7 @@ class TestFloatBinaryOperator:
     def test_ge(self, lhs, rhs, expected):
         assert (lhs >= rhs).eval(self.state, self.model) == expected
 
-    gt_cases = [
+    gt_cases: ClassVar = [
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
@@ -2124,7 +2133,7 @@ class TestSqrt:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (int_expr, pytest.approx(2.0)),
         (int_var, pytest.approx(2.0)),
         (int_resource_var, pytest.approx(2.0)),
@@ -2139,7 +2148,7 @@ class TestSqrt:
     def test(self, value, expected):
         assert dp.sqrt(value).eval(self.state, self.model) == expected
 
-    nan_cases = [-1, dp.IntExpr(-1), dp.FloatExpr(-1.0)]
+    nan_cases: ClassVar = [-1, dp.IntExpr(-1), dp.FloatExpr(-1.0)]
 
     @pytest.mark.parametrize("value", nan_cases)
     def test_nan(self, value):
@@ -2165,7 +2174,7 @@ class TestLog:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     import math
 
@@ -2177,14 +2186,14 @@ class TestLog:
     for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
             if i < 3 or j < 3:
-                cases.append((float_value, int_value, pytest.approx(math.log(0.3, 2))))
+                cases.append((float_value, int_value, pytest.approx(math.log2(0.3))))
                 cases.append((int_value, float_value, pytest.approx(math.log(2, 0.3))))
 
     @pytest.mark.parametrize("lhs, rhs, expected", cases)
     def test(self, lhs, rhs, expected):
         assert dp.log(lhs, rhs).eval(self.state, self.model) == expected
 
-    nan_cases = [
+    nan_cases: ClassVar = [
         (-2, 1),
         (1, -1),
         (dp.IntExpr(-2), 1),
@@ -2213,7 +2222,7 @@ class TestFloat:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (int_expr, pytest.approx(2.0)),
         (int_var, pytest.approx(2.0)),
         (int_resource_var, pytest.approx(2.0)),
@@ -2224,7 +2233,7 @@ class TestFloat:
     def test(self, value, expected):
         assert dp.float(value).eval(self.state, self.model) == expected
 
-    error_cases = [float_expr, float_var, float_resource_var, 2.5]
+    error_cases: ClassVar = [float_expr, float_var, float_resource_var, 2.5]
 
     @pytest.mark.parametrize("value", error_cases)
     def test_error(self, value):
@@ -2250,7 +2259,7 @@ class TestElementMax:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (three, three, 3) for three in [three_expr, three_var, three_resource_var, 3]
     ]
 
@@ -2290,7 +2299,7 @@ class TestSetMax:
 
     state = model.target_state
 
-    cases = [(value, value, {0, 1}) for value in [const, expr, var]]
+    cases: ClassVar = [(value, value, {0, 1}) for value in [const, expr, var]]
 
     for value in [const, expr, var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -2327,7 +2336,7 @@ class TestIntMax:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (value, value, 3) for value in [three_expr, three_var, three_resource_var, 3]
     ]
 
@@ -2358,7 +2367,7 @@ class TestFloatMax:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (value, value, pytest.approx(0.3))
         for value in [three_expr, three_var, three_resource_var, 0.3]
     ]
@@ -2395,7 +2404,7 @@ class TestElementMin:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (three, three, 3) for three in [three_expr, three_var, three_resource_var, 3]
     ]
 
@@ -2435,7 +2444,7 @@ class TestSetMin:
 
     state = model.target_state
 
-    cases = [(value, value, {0, 1}) for value in [const, expr, var]]
+    cases: ClassVar = [(value, value, {0, 1}) for value in [const, expr, var]]
 
     for value in [const, expr, var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -2472,7 +2481,7 @@ class TestIntMin:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (value, value, 3) for value in [three_expr, three_var, three_resource_var, 3]
     ]
 
@@ -2503,7 +2512,7 @@ class TestFloatMin:
 
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (value, value, pytest.approx(0.3))
         for value in [three_expr, three_var, three_resource_var, 0.3]
     ]
@@ -2546,7 +2555,7 @@ class TestMaxMinError:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for set_value in [set_const, set_expr, set_var]:
         for element_value in [element_expr, element_var, element_resource_var, 1]:
@@ -2590,10 +2599,10 @@ class TestFractionalKnapsack:
     state = model.target_state
 
     capacity = 5
-    values = [2, 3, 5, 10]
-    weights = [1, 2, 4, 1]
-    values_float = [2.0, 3.0, 5.0, 10.0]
-    weights_float = [1.0, 2.0, 4.0, 1.0]
+    values: ClassVar = [2, 3, 5, 10]
+    weights: ClassVar = [1, 2, 4, 1]
+    values_float: ClassVar = [2.0, 3.0, 5.0, 10.0]
+    weights_float: ClassVar = [1.0, 2.0, 4.0, 1.0]
 
     int_values = model.add_int_table(values)
     int_weights = model.add_int_table(weights)
@@ -2698,22 +2707,22 @@ class TestMinimumSpanningTree:
         ]
     )
 
-    int_edges = [(0, 1, 1), (0, 2, 4), (0, 3, 3), (1, 2, 2), (2, 3, 6)]
-    float_edges = [
+    int_edges: ClassVar = [(0, 1, 1), (0, 2, 4), (0, 3, 3), (1, 2, 2), (2, 3, 6)]
+    float_edges: ClassVar = [
         (0, 1, 1.5),
         (0, 2, 4.5),
         (0, 3, 3.5),
         (1, 2, 2.5),
         (2, 3, 6.5),
     ]
-    int_edges_with_connectivity = [
+    int_edges_with_connectivity: ClassVar = [
         (0, 1, 1, True),
         (0, 2, 4, True),
         (0, 3, 3, True),
         (1, 2, 2, False),
         (2, 3, 6, True),
     ]
-    float_edges_with_connectivity = [
+    float_edges_with_connectivity: ClassVar = [
         (0, 1, 1.5, True),
         (0, 2, 4.5, True),
         (0, 3, 3.5, True),
@@ -2775,10 +2784,10 @@ class TestMinimumSpanningTree:
 def test_condition_bool_error():
     condition = dp.IntExpr(2) > dp.IntExpr(1)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         bool(condition)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         if condition:
             pass
 
@@ -2795,13 +2804,13 @@ comparison_cases = [
 
 @pytest.mark.parametrize("lhs, rhs", comparison_cases)
 def test_max_bool_error(lhs, rhs):
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         max(lhs, rhs)
 
 
 @pytest.mark.parametrize("lhs, rhs", comparison_cases)
 def test_min_bool_error(lhs, rhs):
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="cannot be converted to bool"):
         min(lhs, rhs)
 
 
@@ -2839,7 +2848,7 @@ def test_condition_eval_error():
     model = dp.Model()
     state = model.target_state
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="called `Option::unwrap"):
         (dp.IntExpr.state_cost() > 0).eval(state, model)
 
 
@@ -2907,7 +2916,7 @@ class TestElementIfThenElse:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -2933,7 +2942,7 @@ class TestSetIfThenElse:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for value in [const, expr, var]:
         for other in [empty_const, empty_expr, empty_var]:
@@ -2958,7 +2967,7 @@ class TestIntIfThenElse:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
@@ -2987,7 +2996,7 @@ class TestFloatIfThenElse:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
         for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
@@ -3046,7 +3055,7 @@ class TestIfThenElseError:
 
     state = model.target_state
 
-    cases = []
+    cases: ClassVar = []
 
     for set_value in [set_const, set_expr, set_var]:
         for element_value in [element_expr, element_var, element_resource_var, 1]:

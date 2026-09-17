@@ -48,7 +48,7 @@ pub enum SetOperator {
     Intersection,
 }
 
-/// Operator on an elment and a set.
+/// Operator on an element and a set.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetElementOperator {
     /// Add an element.
@@ -1126,6 +1126,7 @@ macro_rules! impl_unary_ops {
         }
 
         impl $T {
+            /// Returns the subset whose elements satisfy `f` when bound to `x`.
             #[inline]
             pub fn filter(self, x: LocalVariable, f: Condition) -> SetExpression {
                 SetExpression::from(self).filter(x, f)
@@ -1270,6 +1271,13 @@ impl SetExpression {
         )
     }
 
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
     pub fn eval_with_local_environment<T: StateInterface>(
         &self,
         state: &T,

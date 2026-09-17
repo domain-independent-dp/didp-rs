@@ -122,7 +122,7 @@ impl From<IntegerResourceVariable> for IntegerExpression {
 }
 
 impl IntegerExpression {
-    /// Returns an expression representing the abstract value.
+    /// Returns an expression representing the absolute value.
     ///
     /// # Examples
     ///
@@ -2322,6 +2322,13 @@ impl IntegerExpression {
         )
     }
 
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
     #[inline]
     pub fn eval_with_local_environment<U: StateInterface>(
         &self,
@@ -2386,6 +2393,11 @@ impl IntegerExpression {
         )
     }
 
+    /// Evaluates a cost expression using the supplied successor cost and local variable bindings.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval_cost`], or if a referenced local variable is unbound.
     #[inline]
     pub fn eval_cost_with_local_environment<U: StateInterface>(
         &self,
@@ -2596,29 +2608,30 @@ impl IntegerExpression {
                     registry,
                 );
 
+                // Both evaluations borrow the same mutable cache, so keep them in one closure.
                 let edges = edges.iter().filter_map(|(i, j, weight, condition)| {
-                    condition
-                        .eval_with_local_environment(
-                            state,
-                            function_cache,
-                            local_environment,
-                            state_functions,
-                            registry,
-                        )
-                        .then(|| {
-                            (
-                                *i,
-                                *j,
-                                weight.eval_inner(
-                                    cost,
-                                    state,
-                                    function_cache,
-                                    local_environment,
-                                    state_functions,
-                                    registry,
-                                ),
-                            )
-                        })
+                    if condition.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ) {
+                        Some((
+                            *i,
+                            *j,
+                            weight.eval_inner(
+                                cost,
+                                state,
+                                function_cache,
+                                local_environment,
+                                state_functions,
+                                registry,
+                            ),
+                        ))
+                    } else {
+                        None
+                    }
                 });
 
                 algorithms::compute_minimum_spanning_tree_from_sorted_edges(

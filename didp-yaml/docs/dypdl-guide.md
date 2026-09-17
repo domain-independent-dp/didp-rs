@@ -308,7 +308,7 @@ base_cases:
 ### reduce
 
 `reduce` is required, and the value is either of `min` or `max`.
-The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applicable transitions.
+The name `reduce` comes from the fact that we perform a reduce operation to aggregate the results of cost expressions of applicable transitions.
 `min`/`max` means that the problem is minimization/maximization.
 
 #### Example

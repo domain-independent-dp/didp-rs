@@ -24,7 +24,7 @@ pub struct LocalVariableData {
 }
 
 impl LocalVariableData {
-    /// Adds a local variable;
+    /// Adds a local variable.
     pub fn add<T>(&mut self, name: T) -> Result<LocalVariable, ModelErr>
     where
         String: From<T>,
@@ -41,7 +41,7 @@ impl LocalVariableData {
         Ok(LocalVariable(id))
     }
 
-    /// Returns the name of local variables .
+    /// Returns the number of local variables.
     pub fn number_of_variables(&self) -> usize {
         self.names.len()
     }

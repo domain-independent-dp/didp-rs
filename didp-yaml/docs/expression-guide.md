@@ -190,7 +190,7 @@ The number of element expressions must be the same as `args` of the table.
 
 ```
 (union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(intersection <table name>|<dictionary nam> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(intersection <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 (disjunctive_union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
@@ -246,7 +246,7 @@ It returns the intersection of `<set expression 1>` and `<set expression 2>`.
 (difference <set expression 1> <set expression 2>)
 ```
 
-It returns the differene of `<set expression 1>` and `<set expression 2>`, i.e., the intersection of `<set expression 1>` and the complement set of `<set expression 2>`.
+It returns the difference of `<set expression 1>` and `<set expression 2>`, i.e., the intersection of `<set expression 1>` and the complement set of `<set expression 2>`.
 
 ### add
 

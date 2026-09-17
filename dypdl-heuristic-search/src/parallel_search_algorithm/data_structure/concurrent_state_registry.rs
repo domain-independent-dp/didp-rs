@@ -171,6 +171,11 @@ where
         }
     }
 
+    /// Creates a state registry with the given capacity and number of shards.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `shard_amount` is not a power of two greater than one.
     #[inline]
     pub fn with_capacity_and_shard_amount(
         model: Arc<Model>,

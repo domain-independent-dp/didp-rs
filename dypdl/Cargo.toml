@@ -3,7 +3,7 @@ name = "dypdl"
 version = "0.10.1"
 edition = "2021"
 rust-version = "1.85"
-description = "Libarary for Dynamic Programming Description Language (DyPDL)."
+description = "Library for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
 authors = [
     "Ryo Kuroiwa <kuroiwa@nii.ac.jp>",

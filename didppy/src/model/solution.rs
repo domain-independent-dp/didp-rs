@@ -13,6 +13,7 @@ pyo3::create_exception!(
     "A solution is infeasible, cannot be evaluated, or has an incorrect declared cost."
 );
 
+/// Loads forward transitions and an optional declared cost from a YAML solution.
 pub fn load_from_str(
     model: &ModelPy,
     source: &str,
@@ -33,10 +34,13 @@ pub fn load_from_str(
         .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
+/// A homogeneous sequence of transition IDs or transition objects supplied from Python.
 #[derive(FromPyObject)]
 pub enum SolutionTransitions {
+    /// IDs resolved against the supplied model.
     #[pyo3(transparent, annotation = "Sequence[TransitionId]")]
     Ids(Vec<TransitionIdPy>),
+    /// Transition objects checked against the supplied model when validating.
     #[pyo3(transparent, annotation = "Sequence[Transition]")]
     Transitions(Vec<TransitionPy>),
 }
@@ -85,6 +89,7 @@ impl SolutionTransitions {
     }
 }
 
+/// Serializes transitions and an optional finite cost without checking feasibility.
 pub fn dump_to_str(
     model: &ModelPy,
     transitions: SolutionTransitions,
@@ -109,6 +114,7 @@ pub fn dump_to_str(
         .map_err(|error| PyValueError::new_err(format!("Could not serialize solution: {error}")))
 }
 
+/// Checks forward feasibility and returns the computed cost in the model's numeric type.
 pub fn validate(model: &ModelPy, transitions: SolutionTransitions) -> PyResult<IntOrFloat> {
     if model.float_cost() {
         transitions
@@ -120,6 +126,7 @@ pub fn validate(model: &ModelPy, transitions: SolutionTransitions) -> PyResult<I
     .map_err(|error| ValidationError::new_err(error.to_string()))
 }
 
+/// Compares costs using exact integer equality or the supplied continuous tolerances.
 pub fn validate_cost(
     model: &ModelPy,
     computed_cost: Bound<'_, PyAny>,

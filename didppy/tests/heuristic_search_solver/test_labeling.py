@@ -1,7 +1,6 @@
 import didppy as dp
 import pytest
 
-
 error_cases = [
     ({"primal_bound": 1.5}, TypeError),
     ({"time_limit": -1}, BaseException),
@@ -42,7 +41,7 @@ def test_search():
 
 
 def test_search_next():
-    model, x = resource_model()
+    model, _ = resource_model()
     solver = dp.Labeling(model, quiet=True)
     solution, terminated = solver.search_next()
 
@@ -59,7 +58,9 @@ def multi_category_resource_model():
     e = model.add_element_resource_var(object_type=obj, target=0, less_is_better=True)
     x = model.add_int_resource_var(target=1, less_is_better=True)
     c = model.add_float_resource_var(target=0.0, less_is_better=True)
-    s = model.add_set_resource_var(object_type=obj, target={0, 1, 2}, less_is_better=True)
+    s = model.add_set_resource_var(
+        object_type=obj, target={0, 1, 2}, less_is_better=True
+    )
     model.add_base_case([x == 0])
     t = dp.Transition(
         name="decrement",
@@ -100,7 +101,7 @@ def test_search_panic():
     model.add_dual_bound(0)
     solver = dp.Labeling(model, quiet=True)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search()
 
 
@@ -119,7 +120,7 @@ def test_search_next_panic():
     model.add_dual_bound(0)
     solver = dp.Labeling(model, quiet=True)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search_next()
 
 

@@ -29,7 +29,7 @@ impl SetCondition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     pub fn eval<T: StateInterface>(
         &self,
         state: &T,
@@ -48,6 +48,13 @@ impl SetCondition {
         )
     }
 
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
     pub fn eval_with_local_environment<T: StateInterface>(
         &self,
         state: &T,
@@ -172,7 +179,7 @@ impl SetCondition {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> SetCondition {
         match self {
             Self::IsIn(element, set) => {

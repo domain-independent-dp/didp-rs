@@ -242,7 +242,6 @@ mod tests {
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
             continuous_less_is_better: vec![false, true],
-            ..Default::default()
         }
     }
 

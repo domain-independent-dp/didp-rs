@@ -31,7 +31,7 @@ impl<T: Clone> TableExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     pub fn eval<'a, U: StateInterface>(
         &'a self,
         state: &U,
@@ -111,7 +111,7 @@ impl<T: Clone> TableExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry, tables: &TableData<T>) -> TableExpression<T> {
         match self {
             Self::Table1D(i, x) => match x.simplify(registry) {

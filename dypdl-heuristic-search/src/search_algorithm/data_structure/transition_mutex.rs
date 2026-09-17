@@ -193,7 +193,7 @@ impl TransitionMutex {
         }
     }
 
-    /// Create a successor generator filtering forbidden transitions by the given prefix ans suffix.
+    /// Create a successor generator filtering forbidden transitions by the given prefix and suffix.
     pub fn filter_successor_generator<T, U, R>(
         &self,
         generator: &SuccessorGenerator<T, U, R>,

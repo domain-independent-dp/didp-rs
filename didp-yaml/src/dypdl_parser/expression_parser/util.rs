@@ -9,10 +9,15 @@ use std::fmt;
 /// model's local variable registry (grown on the fly by `bind_local_variable` whenever a
 /// `reduce`/`filter` binder is parsed).
 pub struct ModelData<'a> {
+    /// Names, types, and indices of state variables and object types.
     pub metadata: &'a StateMetadata,
+    /// Registered state functions.
     pub functions: &'a StateFunctions,
+    /// Registered tables and dictionaries.
     pub registry: &'a TableRegistry,
+    /// Values substituted for grounded parameters.
     pub parameters: &'a FxHashMap<String, Element>,
+    /// Local variables registered while parsing higher-order expressions.
     pub local_variable_data: &'a mut LocalVariableData,
 }
 

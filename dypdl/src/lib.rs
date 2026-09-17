@@ -2977,7 +2977,7 @@ impl AddDualBound<expression::ContinuousExpression> for Model {
     fn add_dual_bound(&mut self, bound: expression::ContinuousExpression) -> Result<(), ModelErr> {
         if self.cost_type == CostType::Integer {
             Err(ModelErr::new(String::from(
-                "Could not add a dual bound with a continuous cost expression for a integer cost model"
+                "Could not add a dual bound with a continuous cost expression for an integer cost model"
             )))
         } else {
             self.check_expression(&bound, &mut FxHashSet::default(), false)?;

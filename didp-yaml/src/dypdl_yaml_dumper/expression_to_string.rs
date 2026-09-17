@@ -3241,7 +3241,7 @@ mod tests {
     #[test]
     /// This test shows the behavior that if the user writes a float constant that is actually an integer value,
     /// the yaml string representation of the parsed expression will convert it to integer. This is due to the
-    /// implementation of the string representation of f64 objects, that integral values will have an integeral
+    /// implementation of the string representation of f64 objects, that integral values will have an integral
     /// string representation (without decimal).
     ///
     /// This difference does not affect the correctness of the model.

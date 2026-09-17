@@ -2356,7 +2356,7 @@ mod tests {
     }
 
     #[test]
-    fn pare_set_operation_err() {
+    fn parse_set_operation_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let registry = generate_registry();
@@ -2473,7 +2473,8 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "soemthing", "param", "et0", "2", ")", "e0", ")"]
+        // The object type must be unknown to exercise the error path.
+        let tokens: Vec<String> = ["(", "unknown_object", "param", "et0", "2", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

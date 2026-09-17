@@ -1,6 +1,7 @@
-import pytest
+from typing import ClassVar
 
 import didppy as dp
+import pytest
 
 
 def test_default():
@@ -344,9 +345,7 @@ def test_add_set_resource_var_const():
     model = dp.Model()
     obj = model.add_object_type(number=4)
     const = model.create_set_const(object_type=obj, value={0, 1})
-    var = model.add_set_resource_var(
-        object_type=obj, target=const, less_is_better=True
-    )
+    var = model.add_set_resource_var(object_type=obj, target=const, less_is_better=True)
     obj = model.get_object_type_of(var)
 
     assert model.get_number_of_object(obj) == 4
@@ -642,7 +641,7 @@ class TestSetTarget:
     float_resource_var = model.add_float_resource_var(target=0.6, less_is_better=True)
     set_const = model.create_set_const(object_type=obj, value=[1, 2])
 
-    cases = [
+    cases: ClassVar = [
         (element_var, 2, 2),
         (element_resource_var, 3, 3),
         (set_var, set_const, {1, 2}),
@@ -662,7 +661,7 @@ class TestSetTarget:
 
         assert self.model.get_target(var) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         (element_var, -1, OverflowError),
         (element_var, 1.5, TypeError),
         (element_resource_var, -1, OverflowError),
@@ -1044,7 +1043,7 @@ def test_check_state_constr_error():
     table = model.add_int_table([0, 1, 2, 3])
     model.add_state_constr(table[var + 1] > 0)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.check_state_constr(model.target_state)
 
 
@@ -1052,7 +1051,7 @@ def test_add_state_constr_panic():
     model = dp.Model()
     table = model.add_int_table([1, 2, 3])
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.add_state_constr(table[4] > 0)
 
 
@@ -1117,7 +1116,7 @@ def test_add_base_case_panic():
     model = dp.Model()
     int_var = model.add_int_var(target=3)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(RuntimeError):
         model.add_base_case([int_var > 0], cost=dp.IntExpr.state_cost())
 
 
@@ -1125,7 +1124,7 @@ def test_add_base_case_panic_cost():
     model = dp.Model()
     table = model.add_int_table([1, 2, 3])
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.add_base_case([table[4] > 0])
 
 
@@ -1184,7 +1183,7 @@ def test_check_base_case_error():
     table = model.add_int_table([0, 1, 2, 3])
     model.add_base_case([table[var + 1] > 0])
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.is_base(model.target_state)
 
 
@@ -1316,15 +1315,15 @@ def test_get_transition_error():
 
 
 class TestTransitionError:
-    model = dp.Model()
-    int_var = model.add_int_var(target=3)
-    int_table = model.add_int_table([1, 2, 3, 4])
+    other_model = dp.Model()
+    int_var = other_model.add_int_var(target=3)
+    int_table = other_model.add_int_table([1, 2, 3, 4])
 
     model = dp.Model(float_cost=False)
     float_var = model.add_float_var(target=0.5)
     float_table = model.add_float_table([0.1, 0.2, 0.3, 0.4])
 
-    cases = [
+    cases: ClassVar = [
         (dp.Transition(name="t", cost=dp.FloatExpr.state_cost()), RuntimeError),
         (dp.Transition(name="t", cost=int_table[0]), RuntimeError),
         (dp.Transition(name="t", cost=float_table[4]), BaseException),
@@ -1392,7 +1391,7 @@ class TestAddTransitionDominanceError:
     id3 = model.add_transition(transition3, forced=True)
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (id1, id1, None, RuntimeError),
         (id1, id2, [int_var >= dp.IntExpr.state_cost()], RuntimeError),
         (id1, id3, None, RuntimeError),
@@ -1561,7 +1560,7 @@ class TestAddDualBoundError:
     float_resource_var = model.add_float_resource_var(target=0.6)
     table = model.add_int_table([0, 1, 2])
 
-    int_cases = [
+    int_cases: ClassVar = [
         (1.5, RuntimeError),
         (dp.FloatExpr(1.5), RuntimeError),
         (float_var, RuntimeError),
@@ -1575,7 +1574,7 @@ class TestAddDualBoundError:
         with pytest.raises(error):
             self.model.add_dual_bound(value)
 
-    float_cases = [
+    float_cases: ClassVar = [
         (dp.FloatExpr.state_cost(), RuntimeError),
         (float_var, RuntimeError),
         (float_resource_var, RuntimeError),
@@ -1706,7 +1705,7 @@ def test_eval_dual_bound_int_panic():
     state = model.target_state
     model.add_dual_bound(table[var + 1])
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.eval_dual_bound(state)
 
 
@@ -1718,7 +1717,7 @@ def test_eval_dual_bound_float_panic():
     state = model.target_state
     model.add_dual_bound(table[var + 1])
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         model.eval_dual_bound(state)
 
 

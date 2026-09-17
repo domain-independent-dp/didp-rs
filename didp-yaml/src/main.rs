@@ -141,7 +141,7 @@ fn main() {
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
     let problem = fs::read_to_string(problem).unwrap_or_else(|e| {
-        eprintln!("Could'nt read a problem file: {e:?}");
+        eprintln!("Couldn't read a problem file: {e:?}");
         process::exit(1);
     });
     let problem = yaml_rust::YamlLoader::load_from_str(&problem).unwrap_or_else(|e| {

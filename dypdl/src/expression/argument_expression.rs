@@ -8,10 +8,12 @@ use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
 
-/// An enum used to preform reduce operations over constants in a table.
+/// An enum used to perform reduce operations over constants in a table.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ArgumentExpression {
+    /// A set whose elements are used as table indices.
     Set(SetExpression),
+    /// A single table index.
     Element(ElementExpression),
 }
 
@@ -51,7 +53,7 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> ArgumentExpression {
         match self {
             Self::Set(expression) => ArgumentExpression::Set(expression.simplify(registry)),
@@ -63,7 +65,7 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transitioned state is used or an empty set is passed to a reduce operation or a min/max reduce operation is performed on an empty set.
     pub fn eval_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
@@ -131,7 +133,7 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify_args<'a, I>(args: I) -> Option<Vec<Vec<Element>>>
     where
         I: Iterator<Item = &'a ArgumentExpression>,
@@ -444,7 +446,7 @@ mod tests {
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let mut local_environment = LocalEnvironment::default();
         let registry = TableRegistry::default();
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ArgumentExpression::Set(SetExpression::Complement(Box::new(
@@ -469,7 +471,7 @@ mod tests {
 
     #[test]
     fn simplify_args_some() {
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
                 let mut set = Set::with_capacity(4);
@@ -521,7 +523,7 @@ mod tests {
 
     #[test]
     fn simplify_args_none() {
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
                 let mut set = Set::with_capacity(4);

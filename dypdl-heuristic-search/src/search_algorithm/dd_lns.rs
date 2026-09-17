@@ -219,7 +219,7 @@ where
         }
     }
 
-    //// Search for the next solution, returning the solution using `TransitionWithId`.
+    /// Searches for the next solution, retaining transition IDs, and returns whether search has terminated.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
         if self.input.solution.is_terminated() || self.input.solution.transitions.is_empty() {
             return (self.input.solution.clone(), true);

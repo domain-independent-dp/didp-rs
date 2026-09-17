@@ -9,7 +9,9 @@ use crate::variable_type::Numeric;
 /// Base case.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct BaseCase {
+    /// Conditions that must all hold for the base case to apply.
     pub conditions: Vec<GroundedCondition>,
+    /// Cost of the base case, or zero when no expression is specified.
     pub cost: Option<CostExpression>,
 }
 
@@ -63,7 +65,7 @@ impl BaseCase {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     #[inline]
     pub fn is_satisfied<S: StateInterface>(
         &self,
@@ -81,7 +83,7 @@ impl BaseCase {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     pub fn eval_cost<S: StateInterface, T: Numeric>(
         &self,
         state: &S,
