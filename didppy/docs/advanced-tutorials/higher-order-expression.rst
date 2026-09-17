@@ -128,7 +128,7 @@ Next, we define the :code:`visit` transitions.
     for j in range(1, n + 1):
         time_next = dp.max(time + travel_time[location, j], a[j])
         visit = dp.Transition(
-            name="visit {}".format(j),
+            name=f"visit {j}",
             cost=p[j] + dp.IntExpr.state_cost(),
             effects=[
                 (
@@ -212,4 +212,4 @@ The cost of every transition has the form :code:`w + dp.IntExpr.state_cost()`, s
     for t in solution.transitions:
         print(t.name)
 
-    print("Profit: {}".format(solution.cost))
+    print(f"Profit: {solution.cost}")

@@ -105,7 +105,7 @@ Before defining forced transitions, let's model the other parts of the formulati
         on_location_s = scene_to_actors_table[s] | on_location
 
         shoot = dp.Transition(
-            name="shoot {}".format(s),
+            name=f"shoot {s}",
             cost=d[s] * actor_to_cost[on_location_s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[remaining.contains(s)],
@@ -150,7 +150,7 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
 
     for s in range(n):
         shoot = dp.Transition(
-            name="forced shoot {}".format(s),
+            name=f"forced shoot {s}",
             cost=scene_to_min_cost[s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[

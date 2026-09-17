@@ -17,7 +17,7 @@ DIDP Papers
 
     * This paper parallelizes :class:`~didppy.CABS`.
 
-* Ryo Kuroiwa and J. Christopher Beck. `Domain-Independent Dynamic Programming <https://doi.org/10.1016/j.artint.2026.104506>`_. *Artificial Intelligence*. 2026.
+* Ryo Kuroiwa and J. Christopher Beck. `Domain-Independent Dynamic Programming <https://doi.org/10.1016/j.artint.2026.104506>`_. *Artificial Intelligence.* 2026.
 
     * This paper provides formal definitions of the modeling language and solvers for DIDP. It also introduces DIDP models for the orienteering problem with time windows and the multi-dimensional knapsack problem.
 

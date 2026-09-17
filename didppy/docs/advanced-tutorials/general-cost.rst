@@ -79,7 +79,7 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
 
     for c in range(n):
         close = dp.Transition(
-            name="close {}".format(c),
+            name=f"close {c}",
             cost=dp.max(
                 (opened_and_remaining | (neighbor_table[c] - opened)).len(),
                 dp.IntExpr.state_cost(),

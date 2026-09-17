@@ -95,9 +95,9 @@ Let's use :class:`~didppy.CABS` to solve the model.
 
     for i, t in enumerate(solution.transitions):
         if t.name == "pack":
-            print("pack {}".format(i))
+            print(f"pack {i}")
 
-    print("profit: {}".format(solution.cost))
+    print(f"profit: {solution.cost}")
 
 The solvers are listed in the :ref:`API reference <api-reference:Solvers>`, and their restrictions are described in the individual pages.
 Also, we provide a :doc:`guideline to select a solver </solver-selection>`.

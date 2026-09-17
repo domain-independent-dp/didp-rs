@@ -183,7 +183,7 @@ In DIDPPy, it is represented by a set of transitions.
 
     for j in range(1, n):
         visit = dp.Transition(
-            name="visit {}".format(j),
+            name=f"visit {j}",
             cost=travel_time[location, j] + dp.IntExpr.state_cost(),
             preconditions=[
                 unvisited.contains(j),
@@ -295,7 +295,7 @@ Let's use the :class:`~didppy.CABS` solver to solve this model.
     for t in solution.transitions:
         print(t.name)
 
-    print("Cost: {}".format(solution.cost))
+    print(f"Cost: {solution.cost}")
 
 
 :meth:`~didppy.CABS.search` returns a :class:`~didppy.Solution`, from which we can extract the transitions that walk from the target state to a base case and the cost of the solution.
@@ -534,7 +534,7 @@ Here is the full code for the DP model:
 
     for j in range(1, n):
         visit = dp.Transition(
-            name="visit {}".format(j),
+            name=f"visit {j}",
             cost=travel_time[location, j] + dp.IntExpr.state_cost(),
             preconditions=[unvisited.contains(j)],
             effects=[
@@ -585,7 +585,7 @@ Here is the full code for the DP model:
     for t in solution.transitions:
         print(t.name)
 
-    print("Cost: {}".format(solution.cost))
+    print(f"Cost: {solution.cost}")
 
 Next Steps
 ----------
