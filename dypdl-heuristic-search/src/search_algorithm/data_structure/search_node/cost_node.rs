@@ -3,7 +3,9 @@ use super::super::transition::TransitionWithId;
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 use super::BfsNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface,
+};
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};

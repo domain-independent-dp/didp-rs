@@ -9,7 +9,7 @@ Just like in mixed-integer programming (MIP), once we define a problem as a mode
 Installation
 ------------
 ``didppy`` can be installed from PyPI using ``pip``.
-Python 3.7 or higher is required.
+Python 3.8 or higher is required.
 
 .. code-block:: bash
 

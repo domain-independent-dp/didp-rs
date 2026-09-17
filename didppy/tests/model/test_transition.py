@@ -1,6 +1,7 @@
-import pytest
+from typing import ClassVar
 
 import didppy as dp
+import pytest
 
 
 class TestTransition:
@@ -41,7 +42,7 @@ class TestTransition:
         assert transition[self.float_var].eval(state, self.model) == 0.5
         assert transition[self.float_resource_var].eval(state, self.model) == 0.6
 
-    init_cases = [
+    init_cases: ClassVar = [
         (
             1,
             [
@@ -242,7 +243,7 @@ class TestTransition:
     ]
 
     @pytest.mark.parametrize(
-        "cost, effects, preconditions, expected_cost, expected_effects, expected_n_preconditions",  # noqa: E501
+        "cost, effects, preconditions, expected_cost, expected_effects, expected_n_preconditions",
         init_cases,
     )
     def test_init(
@@ -284,7 +285,7 @@ class TestTransition:
         )
         assert len(transition.preconditions) == expected_n_preconditions
 
-    init_error_cases = [
+    init_error_cases: ClassVar = [
         (dp.ElementExpr(0), None, None),
         (0, [int_var > 0], None),
         (0, None, [(int_var, 0)]),
@@ -300,7 +301,7 @@ class TestTransition:
         effects,
         preconditions,
     ):
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):
             dp.Transition(
                 name="test", cost=cost, effects=effects, preconditions=preconditions
             )
@@ -317,7 +318,7 @@ class TestTransition:
         with pytest.raises(TypeError):
             transition.name = 0
 
-    set_cost_cases = [
+    set_cost_cases: ClassVar = [
         (1, 1),
         (dp.IntExpr.state_cost() + 1, 1),
         (int_var, 3),
@@ -353,9 +354,9 @@ class TestTransition:
         transition = dp.Transition(name="test")
 
         with pytest.raises(TypeError):
-            transition.add_precondition(1 > 0)
+            transition.add_precondition(True)
 
-    set_effect_cases = [
+    set_effect_cases: ClassVar = [
         (element_var, 2, 2),
         (element_var, dp.ElementExpr(2), 2),
         (element_var, element_var, 1),
@@ -455,7 +456,7 @@ class TestTransition:
         assert transition[self.set_var1].eval(state, self.model) == {1, 2}
         assert transition[self.set_var3].eval(state, self.model) == {0, 1}
 
-    set_effect_error_cases = [
+    set_effect_error_cases: ClassVar = [
         (element_var, -1),
         (element_resource_var, -1),
         (set_var1, {1, 2}),
@@ -468,7 +469,7 @@ class TestTransition:
     def test_set_effect_error(self, var, effect):
         transition = dp.Transition(name="test")
 
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):
             transition[var] = effect
 
     @pytest.mark.parametrize("var, effect, expected", set_effect_cases)
@@ -515,7 +516,7 @@ class TestTransition:
     def test_add_effect_error(self, var, effect):
         transition = dp.Transition(name="test")
 
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):
             transition.add_effect(var, effect)
 
     def test_is_applicable(self):
@@ -549,10 +550,10 @@ class TestTransition:
             name="test", preconditions=[dp.IntExpr.state_cost() > 0]
         )
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="called `Option::unwrap"):
             transition.is_applicable(state, self.model)
 
-    apply_cases = [
+    apply_cases: ClassVar = [
         (
             [
                 (element_var, 2),
@@ -624,7 +625,7 @@ class TestTransition:
             name="test", effects=[(self.int_var, dp.IntExpr.state_cost())]
         )
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="called `Option::unwrap"):
             transition.apply(state, self.model)
 
 

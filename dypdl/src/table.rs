@@ -2,8 +2,9 @@ use crate::variable_type::{Element, Set};
 use approx::{AbsDiffEq, RelativeEq};
 use rustc_hash::FxHashMap;
 
+/// A table with a size for each dimension.
 pub trait HasShape {
-    /// Returns the size of the Table.
+    /// Returns the number of entries along each dimension.
     fn shape(&self) -> Vec<usize>;
 }
 
@@ -338,7 +339,9 @@ where
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table<T> {
+    /// Explicit values indexed by a sequence of elements.
     pub map: FxHashMap<Vec<Element>, T>,
+    /// Value returned for index sequences absent from the map.
     pub default: T,
 }
 

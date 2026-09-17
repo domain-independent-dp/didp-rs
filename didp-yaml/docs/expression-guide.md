@@ -42,6 +42,7 @@ dual_bounds:
   - [add](#add)
   - [remove](#remove)
   - [if](#if-1)
+  - [Filter](#filter)
 - [Integer Expression](#integer-expression)
   - [Immediate Value](#immediate-value-2)
   - [Table or Dictionary](#table-or-dictionary-1)
@@ -51,6 +52,8 @@ dual_bounds:
   - [Arithmetic Operations](#arithmetic-operations-1)
   - [Rounding](#rounding)
   - [Cardinality](#cardinality)
+  - [Minimum Spanning Tree](#minimum-spanning-tree)
+  - [Reduce](#reduce)
   - [if](#if-2)
 - [Continuous Expression](#continuous-expression)
   - [Immediate Value](#immediate-value-3)
@@ -61,6 +64,9 @@ dual_bounds:
   - [Arithmetic Operations](#arithmetic-operations-2)
   - [Rounding](#rounding-1)
   - [Cardinality](#cardinality-1)
+  - [Minimum Spanning Tree](#minimum-spanning-tree-1)
+  - [Fractional Knapsack](#fractional-knapsack)
+  - [Reduce](#reduce-1)
   - [if](#if-3)
 - [Condition](#condition)
   - [Table or Dictionary](#table-or-dictionary-3)
@@ -69,6 +75,8 @@ dual_bounds:
   - [Set Comparison](#set-comparison)
   - [is_in](#is_in)
   - [is_empty](#is_empty)
+  - [any](#any)
+  - [all](#all)
   - [not](#not)
   - [and](#and)
   - [or](#or)
@@ -182,7 +190,7 @@ The number of element expressions must be the same as `args` of the table.
 
 ```
 (union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(intersection <table name>|<dictionary nam> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(intersection <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 (disjunctive_union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
@@ -238,7 +246,7 @@ It returns the intersection of `<set expression 1>` and `<set expression 2>`.
 (difference <set expression 1> <set expression 2>)
 ```
 
-It returns the differene of `<set expression 1>` and `<set expression 2>`, i.e., the intersection of `<set expression 1>` and the complement set of `<set expression 2>`.
+It returns the difference of `<set expression 1>` and `<set expression 2>`, i.e., the intersection of `<set expression 1>` and the complement set of `<set expression 2>`.
 
 ### add
 
@@ -264,6 +272,16 @@ It returns the set containing all elements in `<set expression>` except for `<el
 
 It returns `<set expression 1>` if `<condition>` is true.
 Otherwise, it returns `<set expression 2>`.
+
+### Filter
+
+```
+(filter <name> <set expression> <condition>)
+```
+
+It returns the subset of `<set expression>` containing the elements for which `<condition>` holds.
+`<name>` is bound to a fresh local variable representing the current element while parsing `<condition>`; it is not declared anywhere else, and the same name can be reused in unrelated or nested `filter`/`any`/`all`/`reduce` expressions without conflict.
+For example, `(filter x s0 (>= (weight x) 1))` returns the elements of `s0` whose `weight` is at least `1`.
 
 ## Integer Expression
 
@@ -359,6 +377,32 @@ These expressions convert a continuous expression to an integer expression.
 ```
 
 It returns the cardinality of `<set expression>`.
+
+### Minimum Spanning Tree
+
+```
+(minimum_spanning_tree <set expression> <integer 2D table name>)
+(minimum_spanning_tree <set expression> <integer 2D table name> <boolean 2D table name>)
+(minimum_spanning_tree <set expression> ((<element> <element> <integer expression>) ...))
+(minimum_spanning_tree <set expression> ((<element> <element> <integer expression> <condition>) ...))
+```
+
+It returns the minimum spanning tree cost over the elements in `<set expression>`.
+The table form uses a 2D integer table as edge weights.
+The optional boolean 2D table specifies which edges are available.
+Tables are interpreted as undirected: for each pair, connected directions are available, and if both directions are available, the smaller of the two weights is used.
+The edge-list form takes an explicit list of `(i j weight)` tuples, or `(i j weight connectivity)` tuples if every edge also specifies a connectivity condition; weights and conditions may be arbitrary expressions, and edges are sorted internally when the model is simplified.
+Evaluation panics if the elements in `<set expression>` are disconnected under the given connectivity relation.
+
+### Reduce
+
+```
+(reduce sum|product|max|min <name> <set expression> <integer expression>)
+```
+
+It returns the sum, product, maximum, or minimum of `<integer expression>` evaluated once for each element in `<set expression>`.
+`<name>` is bound to a fresh local variable representing the current element while parsing `<integer expression>`; it is not declared anywhere else, and the same name can be reused in unrelated or nested `filter`/`reduce` expressions without conflict.
+For example, `(reduce sum x s0 (weight x))` sums `weight` over the elements of `s0`, and `(reduce sum x (filter y s0 (>= (weight y) 1)) (weight x))` does the same but skips elements whose `weight` is below `1`.
 
 ### if
 
@@ -473,6 +517,46 @@ However, the returned value is still a continuous expression.
 
 It returns the cardinality of `<set expression>`.
 
+### Minimum Spanning Tree
+
+```
+(minimum_spanning_tree <set expression> <continuous 2D table name>)
+(minimum_spanning_tree <set expression> <continuous 2D table name> <boolean 2D table name>)
+(minimum_spanning_tree <set expression> ((<element> <element> <continuous expression>) ...))
+(minimum_spanning_tree <set expression> ((<element> <element> <continuous expression> <condition>) ...))
+```
+
+It returns the minimum spanning tree cost over the elements in `<set expression>`.
+An integer 2D table can also be used in a continuous minimum spanning tree expression.
+The optional boolean 2D table specifies which edges are available.
+Tables are interpreted as undirected: for each pair, connected directions are available, and if both directions are available, the smaller of the two weights is used.
+The edge-list form takes an explicit list of `(i j weight)` tuples, or `(i j weight connectivity)` tuples if every edge also specifies a connectivity condition; weights and conditions may be arbitrary expressions, and edges are sorted internally when the model is simplified.
+Evaluation panics if the elements in `<set expression>` are disconnected under the given connectivity relation.
+
+### Fractional Knapsack
+
+```
+(fractional_knapsack <set expression> <continuous expression> <numeric 1D table name> <numeric 1D table name>)
+(fractional_knapsack <set expression> <continuous expression> ((<element> <continuous expression> <continuous expression>) ...))
+```
+
+It returns the fractional knapsack bound for items in `<set expression>`.
+The second argument is the capacity.
+In the table form, the two 1D numeric tables are values and weights; each table can be integer or continuous.
+In the item-list form, each tuple is an item id, value expression, and weight expression.
+The value and weight expressions may use constants, variables, tables, and state functions.
+Parameterized state functions can be used in value and weight expressions with the normal call syntax, e.g., `(profit i)`.
+
+### Reduce
+
+```
+(reduce sum|product|max|min <name> <set expression> <continuous expression>)
+```
+
+It returns the sum, product, maximum, or minimum of `<continuous expression>` evaluated once for each element in `<set expression>`.
+`<name>` is bound to a fresh local variable representing the current element while parsing `<continuous expression>`; it is not declared anywhere else, and the same name can be reused in unrelated or nested `filter`/`reduce` expressions without conflict.
+For example, `(reduce sum x s0 (weight x))` sums `weight` over the elements of `s0`, and `(reduce sum x (filter y s0 (>= (weight y) 1)) (weight x))` does the same but skips elements whose `weight` is below `1`.
+
 ### if
 
 ```
@@ -563,6 +647,26 @@ It checks if the value of `<element expression>` is included in the value of `<s
 ```
 
 It checks if the value of `<set expression>` is an empty set.
+
+### any
+
+```
+(any <name> <set expression> <condition>)
+```
+
+It returns true if `<condition>` holds for at least one element of `<set expression>`.
+It returns false for an empty set.
+`<name>` is bound to a fresh local variable representing the current element while evaluating `<condition>`.
+
+### all
+
+```
+(all <name> <set expression> <condition>)
+```
+
+It returns true if `<condition>` holds for every element of `<set expression>`.
+It returns true for an empty set.
+`<name>` is bound to a fresh local variable representing the current element while evaluating `<condition>`.
 
 ### not
 

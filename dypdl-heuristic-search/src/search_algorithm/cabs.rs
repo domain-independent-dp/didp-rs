@@ -175,13 +175,13 @@ where
         }
     }
 
-    //// Search for the next solution, returning the solution without converting it into `Transition`.
+    /// Searches for the next solution, retaining transition IDs, and returns whether search has terminated.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
         self.time_keeper.start();
         let model = &self.input.generator.model;
 
         while !self.solution.is_terminated() {
-            let last = self.max_beam_size.map_or(false, |max_beam_size| {
+            let last = self.max_beam_size.is_some_and(|max_beam_size| {
                 if self.beam_size >= max_beam_size {
                     self.beam_size = max_beam_size;
 

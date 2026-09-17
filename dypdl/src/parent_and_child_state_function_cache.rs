@@ -18,3 +18,25 @@ impl ParentAndChildStateFunctionCache {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expression::{Condition, IntegerExpression};
+
+    #[test]
+    fn new_creates_parent_and_child_caches() {
+        let mut state_functions = StateFunctions::default();
+        state_functions
+            .add_integer_function("integer", IntegerExpression::Constant(1))
+            .unwrap();
+        state_functions
+            .add_boolean_function("boolean", Condition::Constant(true))
+            .unwrap();
+
+        let cache = ParentAndChildStateFunctionCache::new(&state_functions);
+
+        assert_eq!(cache.parent, StateFunctionCache::new(&state_functions));
+        assert_eq!(cache.child, StateFunctionCache::new(&state_functions));
+    }
+}

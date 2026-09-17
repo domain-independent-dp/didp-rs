@@ -310,7 +310,7 @@ impl<T> TableInterface<T> for TableData<T> {
     {
         let name = String::from(name);
         if v.is_empty() || v[0].is_empty() || v[0][0].is_empty() {
-            return Err(ModelErr::new(format!("3D table {name} is empy")));
+            return Err(ModelErr::new(format!("3D table {name} is empty")));
         }
         match self.name_to_table_3d.entry(name) {
             Entry::Vacant(e) => {

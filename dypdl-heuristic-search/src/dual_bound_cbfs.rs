@@ -113,13 +113,12 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &CostNode<_>,
-                                         transition,
-                                         cache: &mut ParentAndChildStateFunctionCache,
-                                         registry: &mut _,
-                                         _| {
-            node.insert_successor_node(transition, cache, registry)
-        };
+        let transition_evaluator =
+            move |node: &CostNode<_>,
+                  transition,
+                  cache: &mut ParentAndChildStateFunctionCache,
+                  registry: &mut _,
+                  _| { node.insert_successor_node(transition, cache, registry) };
         Box::new(Cbfs::<_, CostNode<_>, _, _>::new(
             input,
             transition_evaluator,

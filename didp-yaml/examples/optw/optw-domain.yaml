@@ -1,0 +1,70 @@
+domain: OPTW
+objects:
+  - customer
+reduce: max
+cost_type: integer
+state_variables:
+  - name: reachable
+    type: set
+    object: customer
+    preference: greater
+  - name: location
+    type: element
+    object: customer
+  - name: time
+    type: integer
+    preference: less
+tables:
+  - name: goal
+    type: element
+    object: customer
+  - name: profit
+    type: integer
+    args:
+      - customer
+  - name: ready_time
+    type: integer
+    args:
+      - customer
+  - name: due_date
+    type: integer
+    args:
+      - customer
+  - name: travel_time
+    type: integer
+    args:
+      - customer
+      - customer
+  - name: min_to
+    type: integer
+    args:
+      - customer
+  - name: min_from
+    type: integer
+    args:
+      - customer
+transitions:
+  - name: visit
+    parameters:
+      - name: to
+        object: reachable
+    cost: (+ cost (profit to))
+    effect:
+      reachable: (filter x (remove to reachable) (<= (max (+ time (travel_time location to)) (travel_time to x)) (due_date x)))
+      location: to
+      time: (max (+ time (travel_time location to)) (ready_time to))
+    preconditions:
+      - (<= (+ time (travel_time location to)) (due_date to))
+  - name: finish
+    cost: cost
+    effect:
+      reachable: (customer)
+      location: goal
+      time: (+ time (travel_time location goal))
+    preconditions:
+      - (<= (+ time (travel_time location goal)) (due_date goal))
+base_cases:
+  - - (= location goal)
+dual_bounds:
+  - (floor (fractional_knapsack reachable (- (- (due_date goal) time) (min_to goal)) profit min_to))
+  - (floor (fractional_knapsack reachable (- (- (due_date goal) time) (min_from location)) profit min_from))

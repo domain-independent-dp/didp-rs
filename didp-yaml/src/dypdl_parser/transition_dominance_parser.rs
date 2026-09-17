@@ -1,6 +1,9 @@
 use crate::dypdl_parser::{self, expression_parser::ParseErr, state_parser, util};
 use dypdl::prelude::Condition;
-use dypdl::{StateFunctions, StateMetadata, TableRegistry, Transition, TransitionDominance};
+use dypdl::{
+    LocalVariableData, StateFunctions, StateMetadata, TableRegistry, Transition,
+    TransitionDominance,
+};
 use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -37,6 +40,7 @@ pub fn load_transition_dominance_from_yaml(
     registry: &TableRegistry,
     forward_transitions: &[Transition],
     backward_transitions: &[Transition],
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<Vec<TransitionDominance>, Box<dyn Error>> {
     let array = util::get_array(value)?;
     let mut transition_dominance = Vec::with_capacity(array.len());
@@ -127,6 +131,7 @@ pub fn load_transition_dominance_from_yaml(
                         functions,
                         registry,
                         &parameters,
+                        &mut *local_variable_data,
                     )?;
 
                     for c in grounded {
@@ -138,7 +143,6 @@ pub fn load_transition_dominance_from_yaml(
                         // Skip dominance if the condition is always false
                         if c.condition == Condition::Constant(false)
                             && c.elements_in_set_variable.is_empty()
-                            && c.elements_in_vector_variable.is_empty()
                         {
                             continue 'dominated;
                         }
@@ -216,6 +220,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_ok());
         let transition_dominance = result.unwrap();
@@ -348,6 +353,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_ok());
         let transition_dominance = result.unwrap();
@@ -516,6 +522,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -589,6 +596,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -664,6 +672,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -744,6 +753,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -824,6 +834,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -904,6 +915,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -984,6 +996,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }
@@ -1066,6 +1079,7 @@ mod tests {
             &registry,
             &forward_transitions,
             &backward_transitions,
+            &mut LocalVariableData::default(),
         );
         assert!(result.is_err());
     }

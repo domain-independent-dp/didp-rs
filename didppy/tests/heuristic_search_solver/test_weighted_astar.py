@@ -1,7 +1,6 @@
 import didppy as dp
 import pytest
 
-
 error_cases = [
     ({"weight": 1.5, "primal_bound": 1.5}, TypeError),
     ({"weight": 1.5, "time_limit": -1}, BaseException),
@@ -56,7 +55,7 @@ def test_search_panic():
     model.add_dual_bound(0)
     solver = dp.WeightedAstar(model, 1.5)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search()
 
 
@@ -93,5 +92,5 @@ def test_search_next_panic():
     model.add_dual_bound(0)
     solver = dp.WeightedAstar(model, 1.5)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search_next()

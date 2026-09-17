@@ -8,6 +8,9 @@ use std::collections::HashSet;
 use crate::ModelPy;
 
 use super::state::StatePy;
+use crate::model::{
+    BoolTable2DPy, FloatTable1DPy, FloatTable2DPy, IntTable1DPy, IntTable2DPy, LocalVarPy,
+};
 
 pyo3::create_exception!(module, DIDPPyException, pyo3::exceptions::PyException);
 
@@ -33,6 +36,8 @@ pub enum VarUnion {
     ElementResource(ElementResourceVarPy),
     #[pyo3(transparent, annotation = "SetVar")]
     Set(SetVarPy),
+    #[pyo3(transparent, annotation = "SetResourceVar")]
+    SetResource(SetResourceVarPy),
     #[pyo3(transparent, annotation = "IntVar")]
     Int(IntVarPy),
     #[pyo3(transparent, annotation = "IntResourceVar")]
@@ -47,6 +52,8 @@ pub enum VarUnion {
 pub enum ResourceVarUnion {
     #[pyo3(transparent, annotation = "ElementResourceVar")]
     Element(ElementResourceVarPy),
+    #[pyo3(transparent, annotation = "SetResourceVar")]
+    Set(SetResourceVarPy),
     #[pyo3(transparent, annotation = "IntVar")]
     Int(IntResourceVarPy),
     #[pyo3(transparent, annotation = "FloatResourceVar")]
@@ -61,6 +68,66 @@ pub enum ObjectVarUnion {
     ElementResource(ElementResourceVarPy),
     #[pyo3(transparent, annotation = "SetVar")]
     Set(SetVarPy),
+    #[pyo3(transparent, annotation = "SetResourceVar")]
+    SetResource(SetResourceVarPy),
+}
+
+#[derive(FromPyObject, Debug, PartialEq, Clone)]
+pub enum KnapsackItemsUnion {
+    #[pyo3(transparent, annotation = "IntTable1D")]
+    IntTable(IntTable1DPy),
+    #[pyo3(transparent, annotation = "FloatTable1D")]
+    FloatTable(FloatTable1DPy),
+    #[pyo3(
+        transparent,
+        annotation = "list[IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float]"
+    )]
+    Array(Vec<FloatUnion>),
+}
+
+#[derive(FromPyObject, Debug, PartialEq, Clone)]
+pub enum ConditionUnion {
+    #[pyo3(transparent, annotation = "Condition")]
+    Condition(ConditionPy),
+    #[pyo3(transparent, annotation = "bool")]
+    Const(bool),
+}
+
+impl From<ConditionUnion> for Condition {
+    fn from(condition: ConditionUnion) -> Self {
+        match condition {
+            ConditionUnion::Condition(condition) => Condition::from(condition),
+            ConditionUnion::Const(value) => Condition::Constant(value),
+        }
+    }
+}
+
+#[derive(FromPyObject, Debug, PartialEq, Clone)]
+pub enum MinimumSpanningTreeEdgeWeightsUnion {
+    #[pyo3(transparent, annotation = "IntTable2D")]
+    IntTable(IntTable2DPy),
+    #[pyo3(transparent, annotation = "FloatTable2D")]
+    FloatTable(FloatTable2DPy),
+    #[pyo3(
+        transparent,
+        annotation = "list[tuple[int, int, IntExpr, IntVar, IntResourceVar, or int]]"
+    )]
+    IntEdges(Vec<(Element, Element, IntUnion)>),
+    #[pyo3(
+        transparent,
+        annotation = "list[tuple[int, int, FloatExpr, FloatVar, FloatResourceVar, IntExpr, IntVar, IntResourceVar, int, or float]]"
+    )]
+    FloatEdges(Vec<(Element, Element, FloatUnion)>),
+    #[pyo3(
+        transparent,
+        annotation = "list[tuple[int, int, IntExpr, IntVar, IntResourceVar, int, Condition, or bool]]"
+    )]
+    IntEdgesWithConnectivity(Vec<(Element, Element, IntUnion, ConditionUnion)>),
+    #[pyo3(
+        transparent,
+        annotation = "list[tuple[int, int, FloatExpr, FloatVar, FloatResourceVar, IntExpr, IntVar, IntResourceVar, int, float, Condition, or bool]]"
+    )]
+    FloatEdgesWithConnectivity(Vec<(Element, Element, FloatUnion, ConditionUnion)>),
 }
 
 #[derive(FromPyObject, Debug, PartialEq, Clone)]
@@ -71,8 +138,16 @@ pub enum ElementUnion {
     Var(ElementVarPy),
     #[pyo3(transparent, annotation = "ElementResourceVar")]
     ResourceVar(ElementResourceVarPy),
+    #[pyo3(transparent, annotation = "LocalVar")]
+    Local(LocalVarPy),
     #[pyo3(transparent, annotation = "unsigned int")]
     Const(Element),
+}
+
+impl From<LocalVarPy> for ElementExpression {
+    fn from(local: LocalVarPy) -> Self {
+        local.0.into()
+    }
 }
 
 impl From<ElementUnion> for ElementExpression {
@@ -81,6 +156,7 @@ impl From<ElementUnion> for ElementExpression {
             ElementUnion::Expr(expr) => ElementExpression::from(expr),
             ElementUnion::Var(var) => ElementExpression::from(var),
             ElementUnion::ResourceVar(var) => ElementExpression::from(var),
+            ElementUnion::Local(var) => ElementExpression::from(var),
             ElementUnion::Const(value) => ElementExpression::from(value),
         }
     }
@@ -136,7 +212,7 @@ impl From<ElementUnion> for ElementExpression {
 /// False
 /// >>> (expr >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementExpr")]
+#[pyclass(name = "ElementExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ElementExprPy(ElementExpression);
 
@@ -310,7 +386,7 @@ impl ElementExprPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementVar")]
+#[pyclass(name = "ElementVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementVarPy(ElementVariable);
 
@@ -447,7 +523,7 @@ impl ElementVarPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementResourceVar")]
+#[pyclass(name = "ElementResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementResourceVarPy(ElementResourceVariable);
 
@@ -540,12 +616,85 @@ impl ElementResourceVarPy {
     }
 }
 
+#[pymethods]
+impl LocalVarPy {
+    fn __richcmp__(&self, other: ElementUnion, op: CompareOp) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = ElementExpression::from(other);
+        let op = match op {
+            CompareOp::Lt => ComparisonOperator::Lt,
+            CompareOp::Le => ComparisonOperator::Le,
+            CompareOp::Eq => ComparisonOperator::Eq,
+            CompareOp::Ne => ComparisonOperator::Ne,
+            CompareOp::Ge => ComparisonOperator::Ge,
+            CompareOp::Gt => ComparisonOperator::Gt,
+        };
+        ConditionPy(Condition::comparison_e(op, lhs, rhs))
+    }
+
+    fn __add__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(self.0 + ElementExpression::from(other))
+    }
+
+    fn __sub__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(self.0 - ElementExpression::from(other))
+    }
+
+    fn __mul__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(self.0 * ElementExpression::from(other))
+    }
+
+    fn __truediv__(&self, other: ElementUnion) -> ElementExprPy {
+        self.__floordiv__(other)
+    }
+
+    fn __floordiv__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(self.0 / ElementExpression::from(other))
+    }
+
+    fn __mod__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(self.0 % ElementExpression::from(other))
+    }
+
+    fn __radd__(&self, other: ElementUnion) -> ElementExprPy {
+        self.__add__(other)
+    }
+
+    fn __rsub__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(ElementExpression::from(other) - self.0)
+    }
+
+    fn __rmul__(&self, other: ElementUnion) -> ElementExprPy {
+        self.__mul__(other)
+    }
+
+    fn __rtruediv__(&self, other: ElementUnion) -> ElementExprPy {
+        self.__rfloordiv__(other)
+    }
+
+    fn __rfloordiv__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(ElementExpression::from(other) / self.0)
+    }
+
+    fn __rmod__(&self, other: ElementUnion) -> ElementExprPy {
+        ElementExprPy(ElementExpression::from(other) % self.0)
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "LocalVar cannot be converted to bool",
+        ))
+    }
+}
+
 #[derive(FromPyObject, Debug, PartialEq, Clone)]
 pub enum SetUnion {
     #[pyo3(transparent, annotation = "SetExpr")]
     Expr(SetExprPy),
-    #[pyo3(transparent, annotation = "SetVarPy")]
+    #[pyo3(transparent, annotation = "SetVar")]
     Var(SetVarPy),
+    #[pyo3(transparent, annotation = "SetResourceVar")]
+    ResourceVar(SetResourceVarPy),
     #[pyo3(transparent, annotation = "SetConst")]
     Const(SetConstPy),
 }
@@ -555,6 +704,7 @@ impl From<SetUnion> for SetExpression {
         match set {
             SetUnion::Expr(expr) => Self::from(expr),
             SetUnion::Var(var) => Self::from(var),
+            SetUnion::ResourceVar(var) => Self::from(var),
             SetUnion::Const(value) => Self::from(value),
         }
     }
@@ -602,7 +752,7 @@ impl From<SetUnion> for SetExpression {
 /// False
 /// >>> (expr >= const).eval(state, model)
 /// False
-#[pyclass(name = "SetExpr")]
+#[pyclass(name = "SetExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SetExprPy(SetExpression);
 
@@ -1079,6 +1229,187 @@ impl SetExprPy {
         SetExprPy(!self.clone().0)
     }
 
+    /// Returns a filtered set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: Condition
+    ///     Condition to filter the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The filtered set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2, 3])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> x = model.add_local_var()
+    /// >>> expr.filter(x, x > 1).eval(state, model)
+    /// {2, 3}
+    pub fn filter(&self, x: LocalVarPy, f: ConditionPy) -> SetExprPy {
+        SetExprPy(self.clone().0.filter(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for any element in the set.
+    pub fn any(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.clone().0.any(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for all elements in the set.
+    pub fn all(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.clone().0.all(x.0, f.0))
+    }
+
+    /// Returns the sum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The sum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> x = model.add_local_var()
+    /// >>> expr.sum(x, table[x] * table[x]).eval(state, model)
+    /// 13
+    pub fn sum(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.clone().0.sum(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.clone().0.sum_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the product of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The product of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> x = model.add_local_var()
+    /// >>> expr.product(x, table[x] * table[x]).eval(state, model)
+    /// 36
+    pub fn product(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => {
+                IntOrFloatExpr::Int(IntExprPy(self.clone().0.product(x.0, f.0)))
+            }
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.clone().0.product_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the maximum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The maximum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> x = model.add_local_var()
+    /// >>> expr.max(x, table[x] * table[x]).eval(state, model)
+    /// 9
+    pub fn max(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.clone().0.max(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.clone().0.max_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the minimum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The minimum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> x = model.add_local_var()
+    /// >>> expr.min(x, table[x] * table[x]).eval(state, model)
+    /// 4
+    pub fn min(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.clone().0.min(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.clone().0.min_continuous(x.0, f.0)))
+            }
+        }
+    }
+
     /// Evaluates the expression.
     ///
     /// Parameters
@@ -1162,7 +1493,7 @@ impl SetExprPy {
 /// False
 /// >>> (var >= const).eval(state, model)
 /// False
-#[pyclass(name = "SetVar")]
+#[pyclass(name = "SetVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SetVarPy(SetVariable);
 
@@ -1625,10 +1956,883 @@ impl SetVarPy {
     fn complement(&self) -> SetExprPy {
         SetExprPy(!self.0)
     }
+
+    /// Returns a filtered set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: Condition
+    ///     Condition to filter the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The filtered set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    /// >>> state = model.target_state
+    /// >>> x = model.add_local_var()
+    /// >>> var.filter(x, x > 1).eval(state, model)
+    /// {2, 3}
+    fn filter(&self, x: LocalVarPy, f: ConditionPy) -> SetExprPy {
+        SetExprPy(self.0.filter(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for any element in the set.
+    fn any(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.0.any(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for all elements in the set.
+    fn all(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.0.all(x.0, f.0))
+    }
+
+    /// Returns the sum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The sum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.sum(x, table[x] * table[x]).eval(state, model)
+    /// 13
+    fn sum(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.sum(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.sum_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the product of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The product of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.product(x, table[x] * table[x]).eval(state, model)
+    /// 36
+    fn product(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.product(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.product_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the maximum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The maximum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.max(x, table[x] * table[x]).eval(state, model)
+    /// 9
+    fn max(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.max(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.max_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the minimum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The minimum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.min(x, table[x] * table[x]).eval(state, model)
+    /// 4
+    fn min(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.min(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.min_continuous(x.0, f.0)))
+            }
+        }
+    }
+}
+
+/// Set resource variable.
+///
+/// If an operator (:code:`-`, :code:`&`, :code:`^`, :code:`|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+///
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1], less_is_better=False)
+/// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> state = model.target_state
+/// >>> state[var]
+/// {0, 1}
+/// >>> (var - const).eval(state, model)
+/// {0}
+/// >>> (var & const).eval(state, model)
+/// {1}
+/// >>> (var ^ const).eval(state, model)
+/// {0, 2}
+/// >>> (var | const).eval(state, model)
+/// {0, 1, 2}
+/// >>> (var < const).eval(state, model)
+/// False
+/// >>> (var <= const).eval(state, model)
+/// False
+/// >>> (var == const).eval(state, model)
+/// False
+/// >>> (var != const).eval(state, model)
+/// True
+/// >>> (var > const).eval(state, model)
+/// False
+/// >>> (var >= const).eval(state, model)
+/// False
+#[pyclass(name = "SetResourceVar", from_py_object)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct SetResourceVarPy(SetResourceVariable);
+
+impl From<SetResourceVarPy> for SetResourceVariable {
+    fn from(v: SetResourceVarPy) -> Self {
+        v.0
+    }
+}
+
+impl From<SetResourceVariable> for SetResourceVarPy {
+    fn from(v: SetResourceVariable) -> Self {
+        Self(v)
+    }
+}
+
+impl From<SetResourceVarPy> for SetExpression {
+    fn from(v: SetResourceVarPy) -> Self {
+        v.0.into()
+    }
+}
+
+#[pymethods]
+impl SetResourceVarPy {
+    fn __richcmp__(&self, other: SetUnion, op: CompareOp) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = SetExpression::from(other);
+        let condition = match op {
+            CompareOp::Lt => lhs.is_subset(rhs.clone()) & !rhs.is_subset(lhs),
+            CompareOp::Le => lhs.is_subset(rhs),
+            CompareOp::Eq => lhs.is_equal(rhs),
+            CompareOp::Ne => lhs.is_not_equal(rhs),
+            CompareOp::Ge => rhs.is_subset(lhs),
+            CompareOp::Gt => rhs.clone().is_subset(lhs) & !lhs.is_subset(rhs),
+        };
+        ConditionPy(condition)
+    }
+
+    fn __sub__(&self, other: SetUnion) -> SetExprPy {
+        SetExprPy(self.0 - SetExpression::from(other))
+    }
+
+    fn __and__(&self, other: SetUnion) -> SetExprPy {
+        SetExprPy(self.0 & SetExpression::from(other))
+    }
+
+    fn __xor__(&self, other: SetUnion) -> SetExprPy {
+        let other = SetExpression::from(other);
+        SetExprPy((self.0 - other.clone()) | (other - self.0))
+    }
+
+    fn __or__(&self, other: SetUnion) -> SetExprPy {
+        SetExprPy(self.0 | SetExpression::from(other))
+    }
+
+    fn __rsub__(&self, other: SetUnion) -> SetExprPy {
+        SetExprPy(SetExpression::from(other) - self.0)
+    }
+
+    fn __rand__(&self, other: SetUnion) -> SetExprPy {
+        self.__and__(other)
+    }
+
+    fn __rxor__(&self, other: SetUnion) -> SetExprPy {
+        self.__xor__(other)
+    }
+
+    fn __ror__(&self, other: SetUnion) -> SetExprPy {
+        self.__or__(other)
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "SetVar cannot be converted to bool",
+        ))
+    }
+
+    /// isdisjoint(other)
+    ///
+    /// Checks if two sets are disjoint.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[2, 3])
+    /// >>> state = model.target_state
+    /// >>> var.isdisjoint(const).eval(state, model)
+    /// True
+    fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
+        self.__and__(other).is_empty()
+    }
+
+    /// issubset(other)
+    ///
+    /// Checks if this set is a subset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.issubset(const).eval(state, model)
+    /// True
+    fn issubset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(lhs.is_subset(rhs))
+    }
+
+    /// issuperset(other)
+    ///
+    /// Checks if this set is a superset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0])
+    /// >>> state = model.target_state
+    /// >>> expr.issuperset(const).eval(state, model)
+    /// True
+    fn issuperset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(rhs.is_subset(lhs))
+    }
+
+    /// add(element)
+    ///
+    /// Adds an element to a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element added to the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is added.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If :code:`element` is :class:`int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.add(2).eval(state, model)
+    /// {0, 1, 2}
+    fn add(&self, element: ElementUnion) -> SetExprPy {
+        let element = ElementExpression::from(element);
+        SetExprPy(self.0.add(element))
+    }
+
+    /// remove(element)
+    ///
+    /// Removes an element from a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element removed from the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is removed.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If :code:`element` is :class:`int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.remove(1).eval(state, model)
+    /// {0}
+    fn remove(&self, element: ElementUnion) -> SetExprPy {
+        self.discard(element)
+    }
+
+    /// discard(element)
+    ///
+    /// Removes an element from a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element removed from the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is removed.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If :code:`element` is :class:`int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.discard(1).eval(state, model)
+    /// {0}
+    fn discard(&self, element: ElementUnion) -> SetExprPy {
+        let element = ElementExpression::from(element);
+        SetExprPy(self.0.remove(element))
+    }
+
+    /// difference(other)
+    ///
+    /// Returns a set where all elements in an input set are removed.
+    ///
+    /// This method is the same as :code:`-` operation.
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///     Set to remove.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where all elements in :code:`other` are removed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.difference(const).eval(state, model)
+    /// {0}
+    fn difference(&self, other: SetUnion) -> SetExprPy {
+        self.__sub__(other)
+    }
+
+    /// intersection(other)
+    ///
+    /// Returns the intersection with another set.
+    ///
+    /// This method is the same as :code:`&` operation.
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///     Set to take the intersection with.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The intersection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.intersection(const).eval(state, model)
+    /// {1}
+    fn intersection(&self, other: SetUnion) -> SetExprPy {
+        self.__and__(other)
+    }
+
+    /// symmetric_difference(other)
+    ///
+    /// Returns a set which only contains elements included in either of two sets but not in both.
+    ///
+    /// This method is the same as :code:`^` operation.
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///     Set to take the symmetric difference with.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The symmetric difference set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.symmetric_difference(const).eval(state, model)
+    /// {0, 2}
+    fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
+        self.__xor__(other)
+    }
+
+    /// union(other)
+    ///
+    /// Returns the union of two sets.
+    ///
+    /// This method is the same as :code:`\|` operation.
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///     Set to take the union with.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The union.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.union(const).eval(state, model)
+    /// {0, 1, 2}
+    fn union(&self, other: SetUnion) -> SetExprPy {
+        self.__or__(other)
+    }
+
+    /// contains(element)
+    ///
+    /// Returns a condition checking if an element is included.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element to check.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///     The condition checking if an element is included in the set.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If :code:`element` is :class:`int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.contains(0).eval(state, model)
+    /// True
+    fn contains(&self, element: ElementUnion) -> ConditionPy {
+        let element = ElementExpression::from(element);
+        ConditionPy(self.0.contains(element))
+    }
+
+    /// Returns the cardinality of a set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The cardinality.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.len().eval(state, model)
+    /// 2
+    fn len(&self) -> IntExprPy {
+        IntExprPy(self.0.len())
+    }
+
+    /// Returns a condition checking if the set is empty.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///     The condition checking if the set is empty.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.is_empty().eval(state, model)
+    /// False
+    fn is_empty(&self) -> ConditionPy {
+        ConditionPy(self.0.is_empty())
+    }
+
+    /// Returns the complement set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The complement set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.complement().eval(state, model)
+    /// {2, 3}
+    fn complement(&self) -> SetExprPy {
+        SetExprPy(!self.0)
+    }
+
+    /// Returns a filtered set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: Condition
+    ///     Condition to filter the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The filtered set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1, 2, 3], less_is_better=False)
+    /// >>> state = model.target_state
+    /// >>> x = model.add_local_var()
+    /// >>> var.filter(x, x > 1).eval(state, model)
+    /// {2, 3}
+    fn filter(&self, x: LocalVarPy, f: ConditionPy) -> SetExprPy {
+        SetExprPy(self.0.filter(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for any element in the set.
+    fn any(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.0.any(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for all elements in the set.
+    fn all(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        ConditionPy(self.0.all(x.0, f.0))
+    }
+
+    /// Returns the sum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The sum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1], less_is_better=False)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.sum(x, table[x] * table[x]).eval(state, model)
+    /// 13
+    fn sum(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.sum(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.sum_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the product of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The product of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1], less_is_better=False)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.product(x, table[x] * table[x]).eval(state, model)
+    /// 36
+    fn product(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.product(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.product_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the maximum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The maximum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1], less_is_better=False)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.max(x, table[x] * table[x]).eval(state, model)
+    /// 9
+    fn max(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.max(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.max_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the minimum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The minimum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[0, 1], less_is_better=False)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> var.min(x, table[x] * table[x]).eval(state, model)
+    /// 4
+    fn min(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(self.0.min(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(self.0.min_continuous(x.0, f.0)))
+            }
+        }
+    }
 }
 
 /// Set constant.
-#[pyclass(name = "SetConst")]
+#[pyclass(name = "SetConst", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetConstPy(Set);
 
@@ -2136,6 +3340,187 @@ impl SetConstPy {
         SetExprPy(!set)
     }
 
+    /// Returns a filtered set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: Condition
+    ///     Condition to filter the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The filtered set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> const.filter(x, x > 1).eval(state, model)
+    /// {2, 3}
+    fn filter(&self, x: LocalVarPy, f: ConditionPy) -> SetExprPy {
+        let set = SetExpression::from(self.clone());
+        SetExprPy(set.filter(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for any element in the set.
+    fn any(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        let set = SetExpression::from(self.clone());
+        ConditionPy(set.any(x.0, f.0))
+    }
+
+    /// Returns whether the condition holds for all elements in the set.
+    fn all(&self, x: LocalVarPy, f: ConditionPy) -> ConditionPy {
+        let set = SetExpression::from(self.clone());
+        ConditionPy(set.all(x.0, f.0))
+    }
+
+    /// Returns the sum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The sum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> x = model.add_local_var()
+    /// >>> const.sum(x, table[x] * table[x]).eval(state, model)
+    /// 13
+    fn sum(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        let set = SetExpression::from(self.clone());
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(set.sum(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(set.sum_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the product of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The product of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> x = model.add_local_var()
+    /// >>> const.product(x, table[x] * table[x]).eval(state, model)
+    /// 36
+    fn product(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        let set = SetExpression::from(self.clone());
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(set.product(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(set.product_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the maximum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The maximum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> x = model.add_local_var()
+    /// >>> const.max(x, table[x] * table[x]).eval(state, model)
+    /// 9
+    fn max(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        let set = SetExpression::from(self.clone());
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(set.max(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(set.max_continuous(x.0, f.0)))
+            }
+        }
+    }
+
+    /// Returns the minimum of function evaluation results over a set.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: LocalVar
+    ///     Local variable to use for iterator over the set.
+    /// f: IntExpr or FloatExpr
+    ///     Function to sum over the set.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr or FloatExpr
+    ///     The minimum of function evaluation results over the set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> state = model.target_state
+    /// >>> table = model.add_int_table([2, 3])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> x = model.add_local_var()
+    /// >>> const.min(x, table[x] * table[x]).eval(state, model)
+    /// 4
+    fn min(&self, x: LocalVarPy, f: IntOrFloatExpr) -> IntOrFloatExpr {
+        let set = SetExpression::from(self.clone());
+        match f {
+            IntOrFloatExpr::Int(f) => IntOrFloatExpr::Int(IntExprPy(set.min(x.0, f.0))),
+            IntOrFloatExpr::Float(f) => {
+                IntOrFloatExpr::Float(FloatExprPy(set.min_continuous(x.0, f.0)))
+            }
+        }
+    }
+
     /// Returns the set.
     ///
     /// Returns
@@ -2187,9 +3572,11 @@ pub enum IntOrFloatUnion {
     Float(FloatUnion),
 }
 
-#[derive(Debug, PartialEq, Clone, IntoPyObject)]
+#[derive(FromPyObject, Debug, PartialEq, Clone, IntoPyObject)]
 pub enum IntOrFloatExpr {
+    #[pyo3(transparent)]
     Int(IntExprPy),
+    #[pyo3(transparent)]
     Float(FloatExprPy),
 }
 
@@ -2264,7 +3651,7 @@ impl From<CostExpression> for IntOrFloatExpr {
 /// False
 /// >>> (expr >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntExpr")]
+#[pyclass(name = "IntExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct IntExprPy(IntegerExpression);
 
@@ -2607,7 +3994,7 @@ impl IntExprPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntVar")]
+#[pyclass(name = "IntVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntVarPy(IntegerVariable);
 
@@ -2853,7 +4240,7 @@ impl IntVarPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntResourceVar")]
+#[pyclass(name = "IntResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntResourceVarPy(IntegerResourceVariable);
 
@@ -3135,7 +4522,7 @@ impl From<FloatUnion> for ContinuousExpression {
 /// False
 /// >>> (expr > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatExpr")]
+#[pyclass(name = "FloatExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FloatExprPy(ContinuousExpression);
 
@@ -3431,7 +4818,7 @@ impl FloatExprPy {
 /// False
 /// >>> (var > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatVar")]
+#[pyclass(name = "FloatVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatVarPy(ContinuousVariable);
 
@@ -3628,7 +5015,7 @@ impl FloatVarPy {
 /// False
 /// >>> (var > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatResourceVar")]
+#[pyclass(name = "FloatResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatResourceVarPy(ContinuousResourceVariable);
 
@@ -3961,11 +5348,289 @@ pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
     Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), or (SetExpr, SetExpr)"))
 }
 
+/// Returns an expression representing the optimal objective value for the fractional knapsack problem.
+///
+/// Parameters
+/// ----------
+/// set : SetExpr, SetVar, SetResourceVar, or SetConst
+///    Set of items to choose from.
+/// capacity : IntExpr, IntVar, IntResourceVar, int, FloatExpr, FloatVar, FloatResourceVar, or float
+///    Capacity of the knapsack.
+/// values : list of IntExpr, IntVar, IntResourceVar, int, FloatExpr, FloatVar, FloatResourceVar, or float, IntTable1D, or FloatTable1D
+///    Values of the items.
+/// weights : list of IntExpr, IntVar, IntResourceVar, int, FloatExpr, FloatVar, FloatResourceVar, or float, IntTable1D, or FloatTable1D
+///    Weights of the items.
+///
+/// Returns
+/// -------
+/// FloatExpr
+///     Expression representing the optimal solution for the fractional knapsack problem.
+///
+/// Raises
+/// ------
+/// DIDPPyException
+///     If the number of values and weights does not match.
+/// PanicException
+///     If the set or capacity expression is not valid.
+///
+/// Notes
+/// -----
+/// An empty set (no items to choose from) is not an error: the expression evaluates to `0.0`.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> var = model.add_set_var(object_type=obj, target=[0, 1, 2])
+/// >>> state = model.target_state
+/// >>> capacity = 5
+/// >>> values = [2, 3, 5, 10]
+/// >>> weights = [1, 2, 4, 1]
+/// >>> expr = dp.fractional_knapsack(var, capacity, values, weights)
+/// >>> expr.eval(state, model)
+/// 7.5
+#[pyfunction]
+pub fn fractional_knapsack(
+    set: SetUnion,
+    capacity: FloatUnion,
+    values: KnapsackItemsUnion,
+    weights: KnapsackItemsUnion,
+) -> PyResult<FloatExprPy> {
+    let set = SetExpression::from(set);
+    let capacity = ContinuousExpression::from(capacity);
+
+    match (values, weights) {
+        (KnapsackItemsUnion::Array(values), KnapsackItemsUnion::Array(weights)) => {
+            let values = values
+                .into_iter()
+                .map(ContinuousExpression::from)
+                .collect::<Vec<_>>();
+            let weights = weights
+                .into_iter()
+                .map(ContinuousExpression::from)
+                .collect::<Vec<_>>();
+
+            match ContinuousExpression::fractional_knapsack(set, capacity, values, weights) {
+                Ok(expression) => Ok(FloatExprPy(expression)),
+                Err(error) => Err(DIDPPyException::new_err(error.to_string())),
+            }
+        }
+        (KnapsackItemsUnion::IntTable(values), KnapsackItemsUnion::IntTable(weights)) => Ok(
+            FloatExprPy(ContinuousExpression::fractional_knapsack_with_integer_tables(
+                set,
+                capacity,
+                values.into(),
+                weights.into(),
+            )),
+        ),
+        (KnapsackItemsUnion::FloatTable(values), KnapsackItemsUnion::FloatTable(weights)) => {
+            Ok(FloatExprPy(
+                ContinuousExpression::fractional_knapsack_with_continuous_tables(
+                    set,
+                    capacity,
+                    values.into(),
+                    weights.into(),
+                ),
+            ))
+        }
+        (KnapsackItemsUnion::IntTable(values), KnapsackItemsUnion::FloatTable(weights)) => {
+            Ok(FloatExprPy(
+                ContinuousExpression::fractional_knapsack_with_integer_value_and_continuous_weight_tables(
+                    set,
+                    capacity,
+                    values.into(),
+                    weights.into(),
+                ),
+            ))
+        }
+        (KnapsackItemsUnion::FloatTable(values), KnapsackItemsUnion::IntTable(weights)) => {
+            Ok(FloatExprPy(
+                ContinuousExpression::fractional_knapsack_with_continuous_value_and_integer_weight_tables(
+                    set,
+                    capacity,
+                    values.into(),
+                    weights.into(),
+                ),
+            ))
+        }
+        _ => Err(PyTypeError::new_err(
+            "values and weights must both be arrays or both be 1D tables",
+        )),
+    }
+}
+
+/// Returns a minimum spanning tree expression.
+///
+/// Parameters
+/// ----------
+/// nodes : SetExpr, SetVar, SetResourceVar, or SetConst
+///    Set of nodes.
+/// edge_costs : IntTable2D, FloatTable2D, list of tuples, or list of tuples
+///    Edge costs.
+///    A table gives the cost of every pair of nodes.
+///    Alternatively, an explicit list of edges can be given as :code:`(i, j, weight)` tuples, or as :code:`(i, j, weight, connected)` tuples if each edge also specifies its own connectivity condition instead of using the separate `connected` argument.
+/// connected : BoolTable2D or None
+///    Edge connectivity, used only when `edge_costs` is a table. If omitted, all pairs of nodes are considered connected.
+///    The graph is interpreted as undirected: for each pair, connected directions are available, and if both directions are available, the smaller edge cost is used.
+///
+/// Returns
+/// -------
+/// IntExpr or FloatExpr
+///     Expression representing the cost of the minimum spanning tree.
+///
+/// Raises
+/// ------
+/// TypeError
+///     If `connected` is specified while `edge_costs` is an explicit list of edges.
+/// PanicException
+///     If the selected nodes are disconnected under the given connectivity relation.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> nodes = model.create_set_const(object_type=obj, value=[0, 1, 2, 3])
+/// >>> edge_costs = model.add_int_table([[0, 1, 4, 3], [1, 0, 2, 5], [4, 2, 0, 6], [3, 5, 6, 0]])
+/// >>> expr = dp.minimum_spanning_tree(nodes, edge_costs)
+/// >>> expr.eval(model.target_state, model)
+/// 6
+/// >>> connected = model.add_bool_table([[True, True, True, False], [True, True, True, True], [True, True, True, True], [False, True, True, True]])
+/// >>> expr = dp.minimum_spanning_tree(nodes, edge_costs, connected)
+/// >>> expr.eval(model.target_state, model)
+/// 8
+/// >>> edges = [(0, 1, 1), (0, 2, 4), (0, 3, 3), (1, 2, 2), (2, 3, 6)]
+/// >>> expr = dp.minimum_spanning_tree(nodes, edges)
+/// >>> expr.eval(model.target_state, model)
+/// 6
+#[pyfunction]
+#[pyo3(signature = (nodes, edge_costs, connected = None))]
+pub fn minimum_spanning_tree(
+    nodes: SetUnion,
+    edge_costs: MinimumSpanningTreeEdgeWeightsUnion,
+    connected: Option<BoolTable2DPy>,
+) -> PyResult<IntOrFloatExpr> {
+    let nodes = SetExpression::from(nodes);
+
+    match edge_costs {
+        MinimumSpanningTreeEdgeWeightsUnion::IntTable(table) => {
+            let table: Table2DHandle<Integer> = table.into();
+
+            match connected {
+                None => Ok(IntOrFloatExpr::Int(IntExprPy(
+                    IntegerExpression::MinimumSpanningTree(Box::new(nodes), table.id()),
+                ))),
+                Some(connected) => {
+                    let connected: Table2DHandle<bool> = connected.into();
+                    Ok(IntOrFloatExpr::Int(IntExprPy(
+                        IntegerExpression::MinimumSpanningTreeWithConnectivity(
+                            Box::new(nodes),
+                            table.id(),
+                            connected.id(),
+                        ),
+                    )))
+                }
+            }
+        }
+        MinimumSpanningTreeEdgeWeightsUnion::FloatTable(table) => {
+            let table: Table2DHandle<Continuous> = table.into();
+
+            match connected {
+                None => Ok(IntOrFloatExpr::Float(FloatExprPy(
+                    ContinuousExpression::MinimumSpanningTree(Box::new(nodes), table.id()),
+                ))),
+                Some(connected) => {
+                    let connected: Table2DHandle<bool> = connected.into();
+                    Ok(IntOrFloatExpr::Float(FloatExprPy(
+                        ContinuousExpression::MinimumSpanningTreeWithConnectivity(
+                            Box::new(nodes),
+                            table.id(),
+                            connected.id(),
+                        ),
+                    )))
+                }
+            }
+        }
+        MinimumSpanningTreeEdgeWeightsUnion::IntEdges(edges) => {
+            check_no_connected_with_edges(&connected)?;
+            let edges = edges
+                .into_iter()
+                .map(|(i, j, weight)| (i, j, IntegerExpression::from(weight)))
+                .collect();
+            Ok(IntOrFloatExpr::Int(IntExprPy(
+                IntegerExpression::MinimumSpanningTreeWithEdges(Box::new(nodes), edges),
+            )))
+        }
+        MinimumSpanningTreeEdgeWeightsUnion::FloatEdges(edges) => {
+            check_no_connected_with_edges(&connected)?;
+            let edges = edges
+                .into_iter()
+                .map(|(i, j, weight)| (i, j, ContinuousExpression::from(weight)))
+                .collect();
+            Ok(IntOrFloatExpr::Float(FloatExprPy(
+                ContinuousExpression::MinimumSpanningTreeWithEdges(Box::new(nodes), edges),
+            )))
+        }
+        MinimumSpanningTreeEdgeWeightsUnion::IntEdgesWithConnectivity(edges) => {
+            check_no_connected_with_edges(&connected)?;
+            let edges = edges
+                .into_iter()
+                .map(|(i, j, weight, condition)| {
+                    (
+                        i,
+                        j,
+                        IntegerExpression::from(weight),
+                        Condition::from(condition),
+                    )
+                })
+                .collect();
+            Ok(IntOrFloatExpr::Int(IntExprPy(
+                IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                    Box::new(nodes),
+                    edges,
+                ),
+            )))
+        }
+        MinimumSpanningTreeEdgeWeightsUnion::FloatEdgesWithConnectivity(edges) => {
+            check_no_connected_with_edges(&connected)?;
+            let edges = edges
+                .into_iter()
+                .map(|(i, j, weight, condition)| {
+                    (
+                        i,
+                        j,
+                        ContinuousExpression::from(weight),
+                        Condition::from(condition),
+                    )
+                })
+                .collect();
+            Ok(IntOrFloatExpr::Float(FloatExprPy(
+                ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                    Box::new(nodes),
+                    edges,
+                ),
+            )))
+        }
+    }
+}
+
+fn check_no_connected_with_edges(connected: &Option<BoolTable2DPy>) -> PyResult<()> {
+    if connected.is_some() {
+        return Err(PyTypeError::new_err(
+            "connected cannot be specified when edge_costs is an explicit list of edges; \
+             specify connectivity as the fourth element of each edge tuple instead",
+        ));
+    }
+
+    Ok(())
+}
+
 /// Condition.
 ///
-/// The negation of a condition can be crated by :code:`~x`.
-/// The conjunction of two conditions can be crated by :code:`x & y`.
-/// The disjunction of two conditions can be crated by :code:`x | y`.
+/// The negation of a condition can be created by :code:`~x`.
+/// The conjunction of two conditions can be created by :code:`x & y`.
+/// The disjunction of two conditions can be created by :code:`x | y`.
 ///
 /// Parameters
 /// ----------
@@ -3987,7 +5652,7 @@ pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
 /// True
 /// >>> (condition | (var <= 5)).eval(state, model)
 /// True
-#[pyclass(name = "Condition")]
+#[pyclass(name = "Condition", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ConditionPy(Condition);
 
@@ -10962,12 +12627,398 @@ mod tests {
     }
 
     #[test]
+    fn fractional_knapsack_constant_array_ok() {
+        let set = Set::with_capacity(4);
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::Array(vec![FloatUnion::Const(2.0), FloatUnion::Const(3.0)]),
+            KnapsackItemsUnion::Array(vec![FloatUnion::Const(1.0), FloatUnion::Const(2.0)]),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(ContinuousExpression::FractionalKnapsack(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                Box::new(ContinuousExpression::Constant(5.0)),
+                vec![
+                    (
+                        0,
+                        ContinuousExpression::Constant(2.0),
+                        ContinuousExpression::Constant(1.0)
+                    ),
+                    (
+                        1,
+                        ContinuousExpression::Constant(3.0),
+                        ContinuousExpression::Constant(2.0)
+                    )
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_expression_array_ok() {
+        let set = Set::with_capacity(4);
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::Array(vec![
+                FloatUnion::Expr(FloatExprPy(ContinuousExpression::Variable(0))),
+                FloatUnion::Const(3.0),
+            ]),
+            KnapsackItemsUnion::Array(vec![FloatUnion::Const(1.0), FloatUnion::Const(2.0)]),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(ContinuousExpression::FractionalKnapsack(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                Box::new(ContinuousExpression::Constant(5.0)),
+                vec![
+                    (
+                        0,
+                        ContinuousExpression::Variable(0),
+                        ContinuousExpression::Constant(1.0)
+                    ),
+                    (
+                        1,
+                        ContinuousExpression::Constant(3.0),
+                        ContinuousExpression::Constant(2.0)
+                    )
+                ]
+            ))
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_integer_tables_ok() {
+        let mut model = Model::default();
+        let values: Table1DHandle<Integer> = model.add_table_1d("values", vec![2, 3]).unwrap();
+        let weights: Table1DHandle<Integer> = model.add_table_1d("weights", vec![1, 2]).unwrap();
+        let set = Set::with_capacity(4);
+
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::IntTable(IntTable1DPy::from(values)),
+            KnapsackItemsUnion::IntTable(IntTable1DPy::from(weights)),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(ContinuousExpression::FractionalKnapsackIntegerTable(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                Box::new(ContinuousExpression::Constant(5.0)),
+                values.id(),
+                weights.id()
+            ))
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_continuous_tables_ok() {
+        let mut model = Model::default();
+        let values: Table1DHandle<Continuous> =
+            model.add_table_1d("values", vec![2.0, 3.0]).unwrap();
+        let weights: Table1DHandle<Continuous> =
+            model.add_table_1d("weights", vec![1.0, 2.0]).unwrap();
+        let set = Set::with_capacity(4);
+
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::FloatTable(FloatTable1DPy::from(values)),
+            KnapsackItemsUnion::FloatTable(FloatTable1DPy::from(weights)),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(ContinuousExpression::FractionalKnapsackContinuousTable(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                Box::new(ContinuousExpression::Constant(5.0)),
+                values.id(),
+                weights.id()
+            ))
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_integer_value_continuous_weight_tables_ok() {
+        let mut model = Model::default();
+        let values: Table1DHandle<Integer> = model.add_table_1d("values", vec![2, 3]).unwrap();
+        let weights: Table1DHandle<Continuous> =
+            model.add_table_1d("weights", vec![1.0, 2.0]).unwrap();
+        let set = Set::with_capacity(4);
+
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::IntTable(IntTable1DPy::from(values)),
+            KnapsackItemsUnion::FloatTable(FloatTable1DPy::from(weights)),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(
+                ContinuousExpression::FractionalKnapsackIntegerValueContinuousWeightTable(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    Box::new(ContinuousExpression::Constant(5.0)),
+                    values.id(),
+                    weights.id()
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_continuous_value_integer_weight_tables_ok() {
+        let mut model = Model::default();
+        let values: Table1DHandle<Continuous> =
+            model.add_table_1d("values", vec![2.0, 3.0]).unwrap();
+        let weights: Table1DHandle<Integer> = model.add_table_1d("weights", vec![1, 2]).unwrap();
+        let set = Set::with_capacity(4);
+
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::FloatTable(FloatTable1DPy::from(values)),
+            KnapsackItemsUnion::IntTable(IntTable1DPy::from(weights)),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            FloatExprPy(
+                ContinuousExpression::FractionalKnapsackContinuousValueIntegerWeightTable(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    Box::new(ContinuousExpression::Constant(5.0)),
+                    values.id(),
+                    weights.id()
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn fractional_knapsack_mixed_array_and_table_err() {
+        let mut model = Model::default();
+        let values: Table1DHandle<Integer> = model.add_table_1d("values", vec![2, 3]).unwrap();
+
+        let result = fractional_knapsack(
+            SetUnion::Const(SetConstPy::from(Set::with_capacity(4))),
+            FloatUnion::Const(5.0),
+            KnapsackItemsUnion::IntTable(IntTable1DPy::from(values)),
+            KnapsackItemsUnion::Array(vec![FloatUnion::Const(1.0), FloatUnion::Const(2.0)]),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn minimum_spanning_tree_table_ok() {
+        let mut model = Model::default();
+        let table: Table2DHandle<Integer> = model
+            .add_table_2d("edge_costs", vec![vec![0, 1], vec![1, 0]])
+            .unwrap();
+        let set = Set::with_capacity(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::IntTable(IntTable2DPy::from(table)),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Int(IntExprPy(IntegerExpression::MinimumSpanningTree(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                table.id()
+            )))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_table_with_connectivity_ok() {
+        let mut model = Model::default();
+        let table: Table2DHandle<Integer> = model
+            .add_table_2d("edge_costs", vec![vec![0, 1], vec![1, 0]])
+            .unwrap();
+        let connected: Table2DHandle<bool> = model
+            .add_table_2d("connected", vec![vec![true, true], vec![true, true]])
+            .unwrap();
+        let set = Set::with_capacity(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::IntTable(IntTable2DPy::from(table)),
+            Some(BoolTable2DPy::from(connected)),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Int(IntExprPy(
+                IntegerExpression::MinimumSpanningTreeWithConnectivity(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    table.id(),
+                    connected.id()
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_int_edges_ok() {
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::IntEdges(vec![
+                (0, 1, IntUnion::Const(1)),
+                (1, 2, IntUnion::Const(2)),
+            ]),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Int(IntExprPy(IntegerExpression::MinimumSpanningTreeWithEdges(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                vec![
+                    (0, 1, IntegerExpression::Constant(1)),
+                    (1, 2, IntegerExpression::Constant(2)),
+                ],
+            )))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_float_edges_ok() {
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::FloatEdges(vec![
+                (0, 1, FloatUnion::Const(1.5)),
+                (1, 2, FloatUnion::Const(2.5)),
+            ]),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Float(FloatExprPy(
+                ContinuousExpression::MinimumSpanningTreeWithEdges(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    vec![
+                        (0, 1, ContinuousExpression::Constant(1.5)),
+                        (1, 2, ContinuousExpression::Constant(2.5)),
+                    ],
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_int_edges_with_connectivity_ok() {
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::IntEdgesWithConnectivity(vec![
+                (0, 1, IntUnion::Const(1), ConditionUnion::Const(true)),
+                (1, 2, IntUnion::Const(2), ConditionUnion::Const(false)),
+            ]),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Int(IntExprPy(
+                IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    vec![
+                        (
+                            0,
+                            1,
+                            IntegerExpression::Constant(1),
+                            Condition::Constant(true)
+                        ),
+                        (
+                            1,
+                            2,
+                            IntegerExpression::Constant(2),
+                            Condition::Constant(false)
+                        ),
+                    ],
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_float_edges_with_connectivity_ok() {
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set.clone())),
+            MinimumSpanningTreeEdgeWeightsUnion::FloatEdgesWithConnectivity(vec![
+                (0, 1, FloatUnion::Const(1.5), ConditionUnion::Const(true)),
+                (1, 2, FloatUnion::Const(2.5), ConditionUnion::Const(false)),
+            ]),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            IntOrFloatExpr::Float(FloatExprPy(
+                ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                    Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+                    vec![
+                        (
+                            0,
+                            1,
+                            ContinuousExpression::Constant(1.5),
+                            Condition::Constant(true)
+                        ),
+                        (
+                            1,
+                            2,
+                            ContinuousExpression::Constant(2.5),
+                            Condition::Constant(false)
+                        ),
+                    ],
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn minimum_spanning_tree_edges_with_connected_err() {
+        let mut model = Model::default();
+        let connected: Table2DHandle<bool> = model
+            .add_table_2d("connected", vec![vec![true, true], vec![true, true]])
+            .unwrap();
+        let set = Set::with_capacity(2);
+        let result = minimum_spanning_tree(
+            SetUnion::Const(SetConstPy::from(set)),
+            MinimumSpanningTreeEdgeWeightsUnion::IntEdges(vec![(0, 1, IntUnion::Const(1))]),
+            Some(BoolTable2DPy::from(connected)),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn max_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -10989,11 +13040,11 @@ mod tests {
 
     #[test]
     fn max_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11015,11 +13066,11 @@ mod tests {
 
     #[test]
     fn max_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11041,11 +13092,11 @@ mod tests {
 
     #[test]
     fn max_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11059,11 +13110,11 @@ mod tests {
 
     #[test]
     fn min_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11085,11 +13136,11 @@ mod tests {
 
     #[test]
     fn min_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11111,11 +13162,11 @@ mod tests {
 
     #[test]
     fn min_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11137,11 +13188,11 @@ mod tests {
 
     #[test]
     fn min_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11203,12 +13254,12 @@ mod tests {
 
     #[test]
     fn if_then_else_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(0));
         let y = IntExprPy(IntegerExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11230,12 +13281,12 @@ mod tests {
 
     #[test]
     fn if_then_else_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(0.0));
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11257,12 +13308,12 @@ mod tests {
 
     #[test]
     fn if_then_else_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(0));
         let y = ElementExprPy(ElementExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11284,12 +13335,12 @@ mod tests {
 
     #[test]
     fn if_then_else_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(0));
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();

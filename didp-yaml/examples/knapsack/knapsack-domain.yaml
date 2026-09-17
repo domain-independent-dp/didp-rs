@@ -6,6 +6,7 @@ objects:
 state_variables:
   - name: r
     type: integer
+    preference: greater
   - name: i
     type: element
     object: item
@@ -18,6 +19,11 @@ tables:
       - item
   - name: p
     type: integer
+    args:
+      - item
+  - name: remaining_items
+    type: set
+    object: item
     args:
       - item
 transitions:
@@ -37,3 +43,5 @@ transitions:
       - (< i number_of_items)
 base_cases:
   - - (= i number_of_items)
+dual_bounds:
+  - (floor (fractional_knapsack (remaining_items i) r p w))

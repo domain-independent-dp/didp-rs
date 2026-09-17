@@ -5,7 +5,9 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::CostNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface,
+};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

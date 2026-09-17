@@ -130,7 +130,9 @@ mod base_case;
 mod effect;
 pub mod expression;
 mod grounded_condition;
+mod local_variable;
 mod parent_and_child_state_function_cache;
+mod solution_validation;
 mod state;
 mod state_functions;
 mod table;
@@ -143,12 +145,14 @@ pub mod variable_type;
 pub use base_case::BaseCase;
 pub use effect::Effect;
 pub use grounded_condition::GroundedCondition;
+pub use local_variable::{LocalVariable, LocalVariableData};
 pub use parent_and_child_state_function_cache::ParentAndChildStateFunctionCache;
+pub use solution_validation::SolutionValidationError;
 pub use state::{
     AccessPreference, CheckVariable, ContinuousResourceVariable, ContinuousVariable,
     ElementResourceVariable, ElementVariable, GetObjectTypeOf, IntegerResourceVariable,
-    IntegerVariable, ObjectType, ResourceVariables, SetVariable, SignatureVariables, State,
-    StateInterface, StateMetadata, VectorVariable,
+    IntegerVariable, ObjectType, ResourceVariables, SetResourceVariable, SetVariable,
+    SignatureVariables, State, StateInterface, StateMetadata,
 };
 pub use state_functions::{
     BooleanStateFunction, ContinuousStateFunction, ElementStateFunction, IntegerStateFunction,
@@ -161,27 +165,27 @@ pub use table_data::{
 pub use table_registry::TableRegistry;
 pub use transition::{AddEffect, CostExpression, Transition, TransitionInterface};
 pub use util::ModelErr;
-pub use variable_type::{Continuous, Element, Integer, Set, Vector};
+pub use variable_type::{Continuous, Element, Integer, Set};
 
 pub mod prelude {
     //! DyPDL's prelude.
 
     pub use super::expression::{
         ComparisonOperator, Condition, ContinuousBinaryOperation, ContinuousExpression,
-        ElementExpression, IfThenElse, IntegerExpression, MaxMin, SetElementOperation,
-        SetExpression, VectorExpression,
+        ElementExpression, IfThenElse, IntegerExpression, MaxMin, Quantifier, SetElementOperation,
+        SetExpression,
     };
     pub use super::{
         AccessPreference, AccessTarget, AddDualBound, AddEffect, BooleanStateFunction,
         CheckExpression, CheckVariable, Continuous, ContinuousResourceVariable,
         ContinuousStateFunction, ContinuousVariable, CostExpression, CostType, Element,
         ElementResourceVariable, ElementStateFunction, ElementVariable, GetObjectTypeOf, Integer,
-        IntegerResourceVariable, IntegerStateFunction, IntegerVariable, Model, ObjectType,
-        ParentAndChildStateFunctionCache,
-        ReduceFunction, ResourceVariables, Set, SetStateFunction, SetVariable, SignatureVariables,
-        State, StateFunctionCache, StateFunctions, StateInterface, StateMetadata, Table1DHandle,
-        Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition, TransitionId,
-        TransitionInterface, Vector, VectorVariable,
+        IntegerResourceVariable, IntegerStateFunction, IntegerVariable, LocalVariable,
+        LocalVariableData, Model, ObjectType, ParentAndChildStateFunctionCache, ReduceFunction,
+        ResourceVariables, Set, SetResourceVariable, SetStateFunction, SetVariable,
+        SignatureVariables, State, StateFunctionCache, StateFunctions, StateInterface,
+        StateMetadata, Table1DHandle, Table2DHandle, Table3DHandle, TableHandle, TableInterface,
+        Transition, TransitionId, TransitionInterface,
     };
 }
 
@@ -258,6 +262,8 @@ pub struct Model {
     pub state_metadata: StateMetadata,
     /// State functions.
     pub state_functions: StateFunctions,
+    /// Local variables.
+    pub local_variable_data: LocalVariableData,
     /// Target state.
     pub target: State,
     /// Tables of constants.
@@ -326,7 +332,7 @@ impl Model {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a base case.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set in a base case.
     ///
     /// # Examples
     ///
@@ -442,7 +448,7 @@ impl Model {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a dual bound.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set in a dual bound.
     ///
     /// # Examples
     ///
@@ -503,7 +509,7 @@ impl Model {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of the transition.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set in a precondition or an effect of the transition.
     ///
     /// # Examples
     ///
@@ -562,7 +568,7 @@ impl Model {
             &self.table_registry,
         );
 
-        if cost_bound.map_or(false, |bound| match self.reduce_function {
+        if cost_bound.is_some_and(|bound| match self.reduce_function {
             ReduceFunction::Max => successor_cost <= bound,
             ReduceFunction::Min => successor_cost >= bound,
             _ => false,
@@ -575,9 +581,13 @@ impl Model {
 
     /// Validate a solution consists of forward transitions.
     ///
+    /// Legacy interface: prefer [`Model::validate_solution`] to compute the cost
+    /// and receive structured errors. This method accepts unregistered transitions,
+    /// omits target-state constraint checks, and only warns about cost mismatches.
+    ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of a transition.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set in a precondition or an effect of a transition.
     ///
     /// # Examples
     /// ```
@@ -601,69 +611,17 @@ impl Model {
         cost: T,
         show_message: bool,
     ) -> bool {
-        let mut state_vec = vec![self.target.clone()];
-        let mut function_cache = StateFunctionCache::new(&self.state_functions);
-
-        for (i, transition) in transitions.iter().enumerate() {
-            let state = state_vec.last().unwrap();
-            if self.is_base(state, &mut function_cache) {
+        // Preserve the legacy acceptance of unregistered transitions, omission of
+        // target constraints, and warning-only treatment of a cost mismatch.
+        let validation_cost = match self.validate_solution_inner(transitions.iter(), false) {
+            Ok(cost) => cost,
+            Err(error) => {
                 if show_message {
-                    println!("The {} th state satisfies a base case while there are {} transitions left.", i, transitions.len() - i);
+                    println!("{error}");
                 }
                 return false;
             }
-            if !transition.is_applicable(
-                state,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            ) {
-                if show_message {
-                    println!(
-                        "The {} th transition {} is not applicable.",
-                        i,
-                        transition.get_full_name()
-                    );
-                }
-                return false;
-            }
-            let next_state = state.apply_effect(
-                &transition.effect,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            );
-            function_cache.clear();
-
-            if !self.check_constraints(&next_state, &mut function_cache) {
-                if show_message {
-                    println!("The {} th state does not satisfy state constraints", i + 1);
-                }
-                return false;
-            }
-            state_vec.push(next_state);
-        }
-        let mut validation_cost = if let Some(cost) =
-            self.eval_base_cost(state_vec.last().unwrap(), &mut function_cache)
-        {
-            cost
-        } else {
-            if show_message {
-                println!("The last state is not a base state.")
-            }
-            return false;
         };
-        state_vec.pop();
-        for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
-            function_cache.clear();
-            validation_cost = transition.eval_cost(
-                validation_cost,
-                &state,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            );
-        }
         if cost != validation_cost && show_message {
             println!("The cost {cost} does not match the actual cost {validation_cost}. This is possibly due to the cost being continuous.");
         }
@@ -795,7 +753,7 @@ impl Model {
         self.state_metadata.get_number_of_objects(ob)
     }
 
-    // Disabled because it is inconsistent withe the other modeling interfaces.
+    // Disabled because it is inconsistent with the other modeling interfaces.
     // /// Change the number of objects.
     // ///
     // /// # Errors
@@ -1012,7 +970,7 @@ impl Model {
         }
     }
 
-    /// Returns a vector variable given a name.
+    /// Returns a set resource variable given a name.
     ///
     /// # Errors
     ///
@@ -1025,16 +983,17 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_resource_variable("variable", object_type, false, set).unwrap();
     ///
-    /// assert!(model.get_vector_variable("variable").is_ok());
+    /// assert!(model.get_set_resource_variable("variable").is_ok());
     /// ```
     #[inline]
-    pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
-        self.state_metadata.get_vector_variable(name)
+    pub fn get_set_resource_variable(&self, name: &str) -> Result<SetResourceVariable, ModelErr> {
+        self.state_metadata.get_set_resource_variable(name)
     }
 
-    /// Adds and returns a vector variable.
+    /// Adds and returns a set resource variable.
     ///
     /// The value in the target state must be specified.
     ///
@@ -1049,30 +1008,32 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
     ///
-    /// assert!(model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).is_ok());
+    /// assert!(model.add_set_resource_variable("variable", object_type, false, set).is_ok());
     /// ```
-    pub fn add_vector_variable<T>(
+    pub fn add_set_resource_variable<T>(
         &mut self,
         name: T,
         ob: ObjectType,
-        target: Vector,
-    ) -> Result<VectorVariable, ModelErr>
+        less_is_better: bool,
+        target: Set,
+    ) -> Result<SetResourceVariable, ModelErr>
     where
         String: From<T>,
     {
         let n = self.get_number_of_objects(ob)?;
-        if target.iter().any(|v| *v >= n) {
+        if target.len() != n {
             Err(ModelErr::new(format!(
-                "target vector {target:?} for vector variable {name} contains a value >= #objects ({n})",
-                name=String::from(name),
+                "target set size {len} for set resource variable {name} != #objects ({n})",
+                len = target.len(),
+                name = String::from(name),
             )))
         } else {
-            let v = self.state_metadata.add_vector_variable(name, ob)?;
-            self.target
-                .signature_variables
-                .vector_variables
-                .push(target);
+            let v = self
+                .state_metadata
+                .add_set_resource_variable(name, ob, less_is_better)?;
+            self.target.resource_variables.set_variables.push(target);
             Ok(v)
         }
     }
@@ -1355,7 +1316,7 @@ impl Model {
     where
         String: From<T>,
     {
-        self.check_expression(&expression, false)?;
+        self.check_expression(&expression, &mut FxHashSet::default(), false)?;
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::SetExpression::Reference(expression::ReferenceExpression::Constant(
@@ -1418,7 +1379,7 @@ impl Model {
     where
         String: From<T>,
     {
-        self.check_expression(&expression, false)?;
+        self.check_expression(&expression, &mut FxHashSet::default(), false)?;
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::ElementExpression::Constant(constant) = &simplified {
@@ -1476,7 +1437,7 @@ impl Model {
     where
         String: From<T>,
     {
-        self.check_expression(&expression, false)?;
+        self.check_expression(&expression, &mut FxHashSet::default(), false)?;
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::IntegerExpression::Constant(constant) = &simplified {
@@ -1534,7 +1495,7 @@ impl Model {
     where
         String: From<T>,
     {
-        self.check_expression(&expression, false)?;
+        self.check_expression(&expression, &mut FxHashSet::default(), false)?;
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::ContinuousExpression::Constant(constant) = &simplified {
@@ -1601,7 +1562,7 @@ impl Model {
     where
         String: From<T>,
     {
-        self.check_expression(&expression, false)?;
+        self.check_expression(&expression, &mut FxHashSet::default(), false)?;
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::Condition::Constant(constant) = &simplified {
@@ -1611,19 +1572,61 @@ impl Model {
         self.state_functions.add_boolean_function(name, simplified)
     }
 
+    /// Adds a local variable.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_local_variable("variable").is_ok());
+    /// ```
+    pub fn add_local_variable<T>(&mut self, name: T) -> Result<LocalVariable, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.local_variable_data.add(name)
+    }
+
+    /// Returns a local variable given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_local_variable("variable").unwrap();
+    ///
+    /// assert!(model.get_local_variable("variable").is_ok());
+    /// ```
+    pub fn get_local_variable(&self, name: &str) -> Result<LocalVariable, ModelErr> {
+        self.local_variable_data.get(name)
+    }
+
     fn check_and_simplify_condition(
         &self,
         condition: &expression::Condition,
     ) -> Result<GroundedCondition, ModelErr> {
-        self.check_expression(condition, false)?;
+        self.check_expression(condition, &mut FxHashSet::default(), false)?;
         let simplified = condition.simplify(&self.table_registry);
 
-        match condition.simplify(&self.table_registry) {
+        match simplified {
             expression::Condition::Constant(true) => {
-                eprintln!("constraint {condition:?} is always satisfied")
+                eprintln!("condition {condition:?} is always satisfied")
             }
             expression::Condition::Constant(false) => {
-                eprintln!("constraint {condition:?} cannot be satisfied")
+                eprintln!("condition {condition:?} cannot be satisfied")
             }
             _ => {}
         }
@@ -1712,11 +1715,11 @@ impl Model {
     {
         match CostExpression::from(cost) {
             CostExpression::Integer(cost) => {
-                self.check_expression(&cost, allow_cost)?;
+                self.check_expression(&cost, &mut FxHashSet::default(), allow_cost)?;
                 Ok(cost.simplify(&self.table_registry).into())
             }
             CostExpression::Continuous(cost) => {
-                self.check_expression(&cost, allow_cost)?;
+                self.check_expression(&cost, &mut FxHashSet::default(), allow_cost)?;
                 Ok(cost.simplify(&self.table_registry).into())
             }
         }
@@ -1863,12 +1866,8 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
-    /// let result = model.add_forward_transition(transition);
     ///
-    /// assert!(result.is_ok());
-    /// let id = result.unwrap();
-    /// assert!(!id.forced);
-    /// assert!(!id.backward);
+    /// assert!(model.add_forward_transition(transition).is_ok());
     /// ```
     #[inline]
     pub fn add_forward_transition(
@@ -1898,12 +1897,8 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
-    /// let result = model.add_forward_forced_transition(transition);
     ///
-    /// assert!(result.is_ok());
-    /// let id = result.unwrap();
-    /// assert!(id.forced);
-    /// assert!(!id.backward);
+    /// assert!(model.add_forward_forced_transition(transition).is_ok());
     /// ```
     #[inline]
     pub fn add_forward_forced_transition(
@@ -1933,12 +1928,8 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
-    /// let result = model.add_backward_transition(transition);
     ///
-    /// assert!(result.is_ok());
-    /// let id = result.unwrap();
-    /// assert!(!id.forced);
-    /// assert!(id.backward);
+    /// assert!(model.add_backward_transition(transition).is_ok());
     /// ```
     #[inline]
     pub fn add_backward_transition(
@@ -1968,12 +1959,8 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
-    /// let result = model.add_backward_forced_transition(transition);
     ///
-    /// assert!(result.is_ok());
-    /// let id = result.unwrap();
-    /// assert!(id.forced);
-    /// assert!(id.backward);
+    /// assert!(model.add_backward_forced_transition(transition).is_ok());
     /// ```
     #[inline]
     pub fn add_backward_forced_transition(
@@ -2329,16 +2316,24 @@ impl Model {
         &self,
         transition: &Transition,
     ) -> Result<Transition, ModelErr> {
+        self.check_and_simplify_transition_inner(transition, true)
+    }
+
+    fn check_and_simplify_transition_inner(
+        &self,
+        transition: &Transition,
+        show_warnings: bool,
+    ) -> Result<Transition, ModelErr> {
         let cost = match &transition.cost {
             CostExpression::Integer(expression) => {
-                self.check_expression(expression, true)?;
+                self.check_expression(expression, &mut FxHashSet::default(), true)?;
                 CostExpression::from(expression.simplify(&self.table_registry))
             }
             CostExpression::Continuous(expression) => {
                 if self.cost_type == CostType::Integer {
                     return Err(ModelErr::new(String::from("Could not add a transition with a continuous cost expression for an integer cost model")));
                 }
-                self.check_expression(expression, true)?;
+                self.check_expression(expression, &mut FxHashSet::default(), true)?;
                 CostExpression::from(expression.simplify(&self.table_registry))
             }
         };
@@ -2353,23 +2348,23 @@ impl Model {
                 let m = self.state_metadata.object_numbers[object];
                 if *e >= m {
                     return Err(ModelErr::new(format!(
-                        "element {e} >= #objects ({n}) for object id {object}",
+                        "element {e} >= #objects ({m}) for object id {object}",
                     )));
                 }
             }
         }
-        let n = self.state_metadata.number_of_vector_variables();
-        for (i, e, _) in &transition.elements_in_vector_variable {
+        let n = self.state_metadata.number_of_set_resource_variables();
+        for (i, e) in &transition.elements_in_set_resource_variable {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "vector variable id {i} >= #set variables ({n})",
+                    "set resource variable id {i} >= #set resource variables ({n})",
                 )));
             } else {
-                let object = self.state_metadata.vector_variable_to_object[*i];
+                let object = self.state_metadata.set_resource_variable_to_object[*i];
                 let m = self.state_metadata.object_numbers[object];
                 if *e >= m {
                     return Err(ModelErr::new(format!(
-                        "element {e} >= #objects ({n}) for object id {object}",
+                        "element {e} >= #objects ({m}) for object id {object}",
                     )));
                 }
             }
@@ -2387,38 +2382,40 @@ impl Model {
                     let m = self.state_metadata.object_numbers[object];
                     if *e >= m {
                         return Err(ModelErr::new(format!(
-                            "element {e} >= #objects ({n}) for object id {object}",
+                            "element {e} >= #objects ({m}) for object id {object}",
                         )));
                     }
                 }
             }
-            let n = self.state_metadata.number_of_vector_variables();
-            for (i, e, _) in &condition.elements_in_vector_variable {
+            let n = self.state_metadata.number_of_set_resource_variables();
+            for (i, e) in &condition.elements_in_set_resource_variable {
                 if *i >= n {
                     return Err(ModelErr::new(format!(
-                        "vector variable id {i} >= #set variables ({n})",
+                        "set resource variable id {i} >= #set resource variables ({n})",
                     )));
                 } else {
-                    let object = self.state_metadata.vector_variable_to_object[*i];
+                    let object = self.state_metadata.set_resource_variable_to_object[*i];
                     let m = self.state_metadata.object_numbers[object];
                     if *e >= m {
                         return Err(ModelErr::new(format!(
-                            "element {e} >= #objects ({n}) for object id {object}",
+                            "element {e} >= #objects ({m}) for object id {object}",
                         )));
                     }
                 }
             }
-            self.check_expression(&condition.condition, false)?;
+            self.check_expression(&condition.condition, &mut FxHashSet::default(), false)?;
             let simplified = condition.condition.simplify(&self.table_registry);
             let elements_in_set_variable = condition.elements_in_set_variable.clone();
-            let elements_in_vector_variable = condition.elements_in_vector_variable.clone();
+            let elements_in_set_resource_variable =
+                condition.elements_in_set_resource_variable.clone();
             match simplified {
-                expression::Condition::Constant(true) => {
+                expression::Condition::Constant(true) if show_warnings => {
                     eprintln!("precondition {condition:?} is always satisfied");
                 }
                 expression::Condition::Constant(false)
-                    if elements_in_set_variable.is_empty()
-                        && elements_in_vector_variable.is_empty() =>
+                    if show_warnings
+                        && elements_in_set_variable.is_empty()
+                        && elements_in_set_resource_variable.is_empty() =>
                 {
                     eprintln!("precondition {condition:?} is never satisfied");
                 }
@@ -2426,7 +2423,7 @@ impl Model {
             }
             preconditions.push(GroundedCondition {
                 elements_in_set_variable,
-                elements_in_vector_variable,
+                elements_in_set_resource_variable,
                 condition: simplified,
             })
         }
@@ -2443,25 +2440,8 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             set_effects.push((*i, expression.simplify(&self.table_registry)));
-            variable_ids.insert(*i);
-        }
-        let n = self.state_metadata.number_of_vector_variables();
-        let mut vector_effects = Vec::with_capacity(transition.effect.vector_effects.len());
-        let mut variable_ids = FxHashSet::default();
-        for (i, expression) in &transition.effect.vector_effects {
-            if *i >= n {
-                return Err(ModelErr::new(format!(
-                    "vector variable id {i} >= #vector variables ({n})",
-                )));
-            } else if variable_ids.contains(i) {
-                return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {i}",
-                )));
-            }
-            self.check_expression(expression, false)?;
-            vector_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
         let n = self.state_metadata.number_of_element_variables();
@@ -2477,7 +2457,7 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             element_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
@@ -2494,7 +2474,7 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             integer_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
@@ -2511,8 +2491,26 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             continuous_effects.push((*i, expression.simplify(&self.table_registry)));
+            variable_ids.insert(*i);
+        }
+        let n = self.state_metadata.number_of_set_resource_variables();
+        let mut set_resource_effects =
+            Vec::with_capacity(transition.effect.set_resource_effects.len());
+        let mut variable_ids = FxHashSet::default();
+        for (i, expression) in &transition.effect.set_resource_effects {
+            if *i >= n {
+                return Err(ModelErr::new(format!(
+                    "set resource variable id {i} >= #set resource variables ({n})",
+                )));
+            } else if variable_ids.contains(i) {
+                return Err(ModelErr::new(format!(
+                    "the transition already has an effect on set resource variable id {i}",
+                )));
+            }
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
+            set_resource_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
         let n = self.state_metadata.number_of_element_resource_variables();
@@ -2529,7 +2527,7 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             element_resource_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
@@ -2547,7 +2545,7 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             integer_resource_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
@@ -2567,16 +2565,16 @@ impl Model {
                     "the transition already has an effect on set variable id {i}",
                 )));
             }
-            self.check_expression(expression, false)?;
+            self.check_expression(expression, &mut FxHashSet::default(), false)?;
             continuous_resource_effects.push((*i, expression.simplify(&self.table_registry)));
             variable_ids.insert(*i);
         }
         let effect = Effect {
             set_effects,
-            vector_effects,
             element_effects,
             integer_effects,
             continuous_effects,
+            set_resource_effects,
             element_resource_effects,
             integer_resource_effects,
             continuous_resource_effects,
@@ -2586,7 +2584,7 @@ impl Model {
             parameter_names: transition.parameter_names.clone(),
             parameter_values: transition.parameter_values.clone(),
             elements_in_set_variable: transition.elements_in_set_variable.clone(),
-            elements_in_vector_variable: transition.elements_in_vector_variable.clone(),
+            elements_in_set_resource_variable: transition.elements_in_set_resource_variable.clone(),
             preconditions,
             effect,
             cost,
@@ -2677,22 +2675,23 @@ impl AccessTarget<SetVariable, Set> for Model {
     }
 }
 
-impl AccessTarget<VectorVariable, Vector> for Model {
-    fn get_target(&self, variable: VectorVariable) -> Result<Vector, ModelErr> {
+impl AccessTarget<SetResourceVariable, Set> for Model {
+    fn get_target(&self, variable: SetResourceVariable) -> Result<Set, ModelErr> {
         self.state_metadata.check_variable(variable)?;
-        Ok(self.target.get_vector_variable(variable.id()).clone())
+        Ok(self.target.get_set_resource_variable(variable.id()).clone())
     }
 
-    fn set_target(&mut self, variable: VectorVariable, target: Vector) -> Result<(), ModelErr> {
+    fn set_target(&mut self, variable: SetResourceVariable, target: Set) -> Result<(), ModelErr> {
         let ob = self.get_object_type_of(variable)?;
         let n = self.get_number_of_objects(ob)?;
-        if target.iter().any(|v| *v >= n) {
+        if target.len() != n {
             Err(ModelErr::new(format!(
-                "target vector {target:?} for vector variable id {id} contains a value >= #objects ({n})",
-                id=variable.id(),
+                "target set size {len} for set resource variable id {id} != #objects ({n})",
+                len = target.len(),
+                id = variable.id(),
             )))
         } else {
-            self.target.signature_variables.vector_variables[variable.id()] = target;
+            self.target.resource_variables.set_variables[variable.id()] = target;
             Ok(())
         }
     }
@@ -2754,7 +2753,7 @@ macro_rules! impl_get_object_type_of {
 impl_get_object_type_of!(ElementVariable);
 impl_get_object_type_of!(ElementResourceVariable);
 impl_get_object_type_of!(SetVariable);
-impl_get_object_type_of!(VectorVariable);
+impl_get_object_type_of!(SetResourceVariable);
 
 macro_rules! impl_access_preference {
     ($T:ty) => {
@@ -2772,6 +2771,7 @@ macro_rules! impl_access_preference {
     };
 }
 
+impl_access_preference!(SetResourceVariable);
 impl_access_preference!(ElementResourceVariable);
 impl_access_preference!(IntegerResourceVariable);
 impl_access_preference!(ContinuousResourceVariable);
@@ -2918,7 +2918,6 @@ macro_rules! impl_table_interface {
 
 impl_table_interface!(Element);
 impl_table_interface!(Set);
-impl_table_interface!(Vector);
 impl_table_interface!(Integer);
 impl_table_interface!(Continuous);
 impl_table_interface!(bool);
@@ -2950,7 +2949,7 @@ impl AddDualBound<expression::IntegerExpression> for Model {
     /// assert!(model.add_dual_bound(IntegerExpression::from(0)).is_ok());
     /// ```
     fn add_dual_bound(&mut self, bound: expression::IntegerExpression) -> Result<(), ModelErr> {
-        self.check_expression(&bound, false)?;
+        self.check_expression(&bound, &mut FxHashSet::default(), false)?;
         self.dual_bounds.push(CostExpression::Integer(
             bound.simplify(&self.table_registry),
         ));
@@ -2978,10 +2977,10 @@ impl AddDualBound<expression::ContinuousExpression> for Model {
     fn add_dual_bound(&mut self, bound: expression::ContinuousExpression) -> Result<(), ModelErr> {
         if self.cost_type == CostType::Integer {
             Err(ModelErr::new(String::from(
-                "Could not add a dual bound with a continuous cost expression for a integer cost model"
+                "Could not add a dual bound with a continuous cost expression for an integer cost model"
             )))
         } else {
-            self.check_expression(&bound, false)?;
+            self.check_expression(&bound, &mut FxHashSet::default(), false)?;
             self.dual_bounds.push(CostExpression::Continuous(
                 bound.simplify(&self.table_registry),
             ));
@@ -2997,7 +2996,12 @@ pub trait CheckExpression<T> {
     /// # Errors
     ///
     /// If the expression is invalid, e.., it uses not existing variables or the state of the transitioned state.
-    fn check_expression(&self, expression: &T, allow_cost: bool) -> Result<(), ModelErr>;
+    fn check_expression(
+        &self,
+        expression: &T,
+        local_variables: &mut FxHashSet<usize>,
+        allow_cost: bool,
+    ) -> Result<(), ModelErr>;
 }
 
 macro_rules! impl_check_table_expression {
@@ -3006,29 +3010,30 @@ macro_rules! impl_check_table_expression {
             fn check_expression(
                 &self,
                 expression: &expression::TableExpression<$T>,
+                local_variables: &mut FxHashSet<usize>,
                 allow_cost: bool,
             ) -> Result<(), ModelErr> {
                 match expression {
                     expression::TableExpression::Constant(_) => Ok(()),
                     expression::TableExpression::Table1D(id, x) => {
                         self.table_registry.$x.check_table_1d(*id)?;
-                        self.check_expression(x, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)
                     }
                     expression::TableExpression::Table2D(id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)
                     }
                     expression::TableExpression::Table3D(id, x, y, z) => {
                         self.table_registry.$x.check_table_3d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)?;
-                        self.check_expression(z, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)?;
+                        self.check_expression(z, local_variables, allow_cost)
                     }
                     expression::TableExpression::Table(id, args) => {
                         self.table_registry.$x.check_table(*id)?;
                         for expression in args {
-                            self.check_expression(expression, allow_cost)?;
+                            self.check_expression(expression, local_variables, allow_cost)?;
                         }
                         Ok(())
                     }
@@ -3040,22 +3045,21 @@ macro_rules! impl_check_table_expression {
 
 impl_check_table_expression!(Element, element_tables);
 impl_check_table_expression!(Set, set_tables);
-impl_check_table_expression!(Vector, vector_tables);
 impl_check_table_expression!(bool, bool_tables);
 
 impl CheckExpression<expression::ArgumentExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::ArgumentExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
-            expression::ArgumentExpression::Set(set) => self.check_expression(set, allow_cost),
-            expression::ArgumentExpression::Vector(vector) => {
-                self.check_expression(vector, allow_cost)
+            expression::ArgumentExpression::Set(set) => {
+                self.check_expression(set, local_variables, allow_cost)
             }
             expression::ArgumentExpression::Element(element) => {
-                self.check_expression(element, allow_cost)
+                self.check_expression(element, local_variables, allow_cost)
             }
         }
     }
@@ -3067,6 +3071,7 @@ macro_rules! impl_check_numeric_table_expression {
             fn check_expression(
                 &self,
                 expression: &expression::NumericTableExpression<$T>,
+                local_variables: &mut FxHashSet<usize>,
                 allow_cost: bool,
             ) -> Result<(), ModelErr> {
                 match expression {
@@ -3074,85 +3079,56 @@ macro_rules! impl_check_numeric_table_expression {
                     expression::NumericTableExpression::Table(id, args) => {
                         self.table_registry.$x.check_table(*id)?;
                         for expression in args {
-                            self.check_expression(expression, allow_cost)?;
+                            self.check_expression(expression, local_variables, allow_cost)?;
                         }
                         Ok(())
                     }
                     expression::NumericTableExpression::TableReduce(_, id, args) => {
                         self.table_registry.$x.check_table(*id)?;
                         for expression in args {
-                            self.check_expression(expression, allow_cost)?;
+                            self.check_expression(expression, local_variables, allow_cost)?;
                         }
                         Ok(())
                     }
                     expression::NumericTableExpression::Table1D(id, x) => {
                         self.table_registry.$x.check_table_1d(*id)?;
-                        self.check_expression(x, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table2D(id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table3D(id, x, y, z) => {
                         self.table_registry.$x.check_table_3d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)?;
-                        self.check_expression(z, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)?;
+                        self.check_expression(z, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table1DReduce(_, id, x) => {
                         self.table_registry.$x.check_table_1d(*id)?;
-                        self.check_expression(x, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table1DVectorReduce(_, id, x) => {
-                        self.table_registry.$x.check_table_1d(*id)?;
-                        self.check_expression(x, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table2DReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table2DVectorReduce(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table2DSetVectorReduce(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table2DVectorSetReduce(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table2DReduceX(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table2DReduceY(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table2DVectorReduceX(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::NumericTableExpression::Table2DVectorReduceY(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)
                     }
                     expression::NumericTableExpression::Table3DReduce(_, id, x, y, z) => {
                         self.table_registry.$x.check_table_3d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)?;
-                        self.check_expression(z, allow_cost)
+                        self.check_expression(x, local_variables, allow_cost)?;
+                        self.check_expression(y, local_variables, allow_cost)?;
+                        self.check_expression(z, local_variables, allow_cost)
                     }
                 }
             }
@@ -3163,101 +3139,11 @@ macro_rules! impl_check_numeric_table_expression {
 impl_check_numeric_table_expression!(Integer, integer_tables);
 impl_check_numeric_table_expression!(Continuous, continuous_tables);
 
-impl CheckExpression<expression::VectorOrElementExpression> for Model {
-    fn check_expression(
-        &self,
-        expression: &expression::VectorOrElementExpression,
-        allow_cost: bool,
-    ) -> Result<(), ModelErr> {
-        match expression {
-            expression::VectorOrElementExpression::Vector(vector) => {
-                self.check_expression(vector, allow_cost)
-            }
-            expression::VectorOrElementExpression::Element(element) => {
-                self.check_expression(element, allow_cost)
-            }
-        }
-    }
-}
-
-macro_rules! impl_check_table_vector_expression {
-    ($T:ty,$x:ident) => {
-        impl CheckExpression<expression::TableVectorExpression<$T>> for Model {
-            fn check_expression(
-                &self,
-                expression: &expression::TableVectorExpression<$T>,
-                allow_cost: bool,
-            ) -> Result<(), ModelErr> {
-                match expression {
-                    expression::TableVectorExpression::Constant(_) => Ok(()),
-                    expression::TableVectorExpression::Table(id, args) => {
-                        self.table_registry.$x.check_table(*id)?;
-                        for expression in args {
-                            self.check_expression(expression, allow_cost)?;
-                        }
-                        Ok(())
-                    }
-                    expression::TableVectorExpression::TableReduce(_, id, args) => {
-                        self.table_registry.$x.check_table(*id)?;
-                        for expression in args {
-                            self.check_expression(expression, allow_cost)?;
-                        }
-                        Ok(())
-                    }
-                    expression::TableVectorExpression::Table1D(id, x) => {
-                        self.table_registry.$x.check_table_1d(*id)?;
-                        self.check_expression(x, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table2D(id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table2DX(id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table2DY(id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table3D(id, x, y, z) => {
-                        self.table_registry.$x.check_table_3d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)?;
-                        self.check_expression(z, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table2DXReduce(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table2DYReduce(_, id, x, y) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)
-                    }
-                    expression::TableVectorExpression::Table3DReduce(_, id, x, y, z) => {
-                        self.table_registry.$x.check_table_3d(*id)?;
-                        self.check_expression(x, allow_cost)?;
-                        self.check_expression(y, allow_cost)?;
-                        self.check_expression(z, allow_cost)
-                    }
-                }
-            }
-        }
-    };
-}
-
-impl_check_table_vector_expression!(Integer, integer_tables);
-impl_check_table_vector_expression!(Continuous, continuous_tables);
-
 impl CheckExpression<expression::ElementExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::ElementExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
@@ -3293,23 +3179,25 @@ impl CheckExpression<expression::ElementExpression> for Model {
                 }
             }
             expression::ElementExpression::BinaryOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
-            }
-            expression::ElementExpression::Last(vector) => {
-                self.check_expression(vector.as_ref(), allow_cost)
-            }
-            expression::ElementExpression::At(vector, element) => {
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(element.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::ElementExpression::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
+                self.check_expression(table.as_ref(), local_variables, allow_cost)
             }
             expression::ElementExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
+            }
+            expression::ElementExpression::LocalVariable(id) => {
+                if local_variables.contains(id) {
+                    Ok(())
+                } else {
+                    Err(ModelErr::new(format!(
+                        "local variable id {id} is not in the local environment",
+                    )))
+                }
             }
         }
     }
@@ -3319,6 +3207,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::SetReduceExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
@@ -3332,7 +3221,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                         "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 1D table",
                     )));
                 }
-                self.check_expression(x.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)
             }
             expression::SetReduceExpression::Table2D(_, capacity, i, x, y) => {
                 self.table_registry.set_tables.check_table_2d(*i)?;
@@ -3343,8 +3232,8 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                         "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 2D table",
                     )));
                 }
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::SetReduceExpression::Table3D(_, capacity, i, x, y, z) => {
                 self.table_registry.set_tables.check_table_3d(*i)?;
@@ -3355,9 +3244,9 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                         "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 3D table",
                     )));
                 }
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)?;
-                self.check_expression(z.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(z.as_ref(), local_variables, allow_cost)
             }
             expression::SetReduceExpression::Table(_, capacity, i, args) => {
                 self.table_registry.set_tables.check_table(*i)?;
@@ -3368,7 +3257,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                     )));
                 }
                 for arg in args {
-                    self.check_expression(arg, allow_cost)?;
+                    self.check_expression(arg, local_variables, allow_cost)?;
                 }
                 Ok(())
             }
@@ -3380,6 +3269,7 @@ impl CheckExpression<expression::SetExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::SetExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
@@ -3396,8 +3286,20 @@ impl CheckExpression<expression::SetExpression> for Model {
                     Ok(())
                 }
             }
+            expression::SetExpression::Reference(
+                expression::ReferenceExpression::ResourceVariable(id),
+            ) => {
+                let n = self.state_metadata.number_of_set_resource_variables();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "set resource variable id {id} >= #variables ({n})",
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
             expression::SetExpression::Reference(expression::ReferenceExpression::Table(table)) => {
-                self.check_expression(table, allow_cost)
+                self.check_expression(table, local_variables, allow_cost)
             }
             expression::SetExpression::StateFunction(id) => {
                 let n = self.state_functions.set_functions.len();
@@ -3410,77 +3312,41 @@ impl CheckExpression<expression::SetExpression> for Model {
                 }
             }
             expression::SetExpression::Complement(expression) => {
-                self.check_expression(expression.as_ref(), allow_cost)
+                self.check_expression(expression.as_ref(), local_variables, allow_cost)
             }
             expression::SetExpression::SetOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::SetExpression::SetElementOperation(_, x, y) => {
-                self.check_expression(x, allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x, local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::SetExpression::Reduce(expression) => {
-                self.check_expression(expression, allow_cost)
-            }
-            expression::SetExpression::FromVector(_, vector) => {
-                self.check_expression(vector.as_ref(), allow_cost)
+                self.check_expression(expression, local_variables, allow_cost)
             }
             expression::SetExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
-        }
-    }
-}
-
-impl CheckExpression<expression::VectorExpression> for Model {
-    fn check_expression(
-        &self,
-        expression: &expression::VectorExpression,
-        allow_cost: bool,
-    ) -> Result<(), ModelErr> {
-        match expression {
-            expression::VectorExpression::Reference(expression::ReferenceExpression::Constant(
-                _,
-            )) => Ok(()),
-            expression::VectorExpression::Reference(expression::ReferenceExpression::Variable(
-                id,
-            )) => {
-                let n = self.state_metadata.number_of_vector_variables();
+            expression::SetExpression::Filter(set, id, condition) => {
+                let n = self.local_variable_data.number_of_variables();
                 if *id >= n {
-                    Err(ModelErr::new(format!(
-                        "vector variable id {id} >= #varaibles ({n})",
-                    )))
-                } else {
-                    Ok(())
+                    return Err(ModelErr::new(format!(
+                        "local variable id {id} >= #variables ({n})",
+                    )));
                 }
-            }
-            expression::VectorExpression::Reference(expression::ReferenceExpression::Table(
-                table,
-            )) => self.check_expression(table, allow_cost),
-            expression::VectorExpression::Indices(expression)
-            | expression::VectorExpression::Reverse(expression)
-            | expression::VectorExpression::Pop(expression) => {
-                self.check_expression(expression.as_ref(), allow_cost)
-            }
-            expression::VectorExpression::Set(element, vector, i) => {
-                self.check_expression(element, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(i, allow_cost)
-            }
-            expression::VectorExpression::Push(element, vector) => {
-                self.check_expression(element, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)
-            }
-            expression::VectorExpression::FromSet(set) => {
-                self.check_expression(set.as_ref(), allow_cost)
-            }
-            expression::VectorExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*id);
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+
+                if remove_after {
+                    local_variables.remove(id);
+                }
+
+                Ok(())
             }
         }
     }
@@ -3490,6 +3356,7 @@ impl CheckExpression<expression::IntegerExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::IntegerExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
@@ -3529,9 +3396,9 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                     if self.cost_type == CostType::Integer {
                         Ok(())
                     } else {
+                        let cost_type = self.cost_type;
                         Err(ModelErr::new(format!(
                             "using cost is not allowed in an integer expression as the cost type is {cost_type:?}. Please explicitly cast it to an integer expression.",
-                            cost_type=self.cost_type,
                         )))
                     }
                 } else {
@@ -3541,38 +3408,144 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                 }
             }
             expression::IntegerExpression::UnaryOperation(_, x) => {
-                self.check_expression(x.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)
             }
             expression::IntegerExpression::BinaryOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::IntegerExpression::Cardinality(set) => {
-                self.check_expression(set, allow_cost)
-            }
-            expression::IntegerExpression::Length(vector) => {
-                self.check_expression(vector, allow_cost)
+                self.check_expression(set, local_variables, allow_cost)
             }
             expression::IntegerExpression::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
+                self.check_expression(table.as_ref(), local_variables, allow_cost)
+            }
+            expression::IntegerExpression::MinimumSpanningTree(set, table) => {
+                self.table_registry.integer_tables.check_table_2d(*table)?;
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
+            }
+            expression::IntegerExpression::MinimumSpanningTreeWithConnectivity(
+                set,
+                table,
+                connectivity_table,
+            ) => {
+                self.table_registry.integer_tables.check_table_2d(*table)?;
+                self.table_registry
+                    .bool_tables
+                    .check_table_2d(*connectivity_table)?;
+
+                let table_shape = self.table_registry.integer_tables.tables_2d[*table].shape();
+                let connectivity_shape =
+                    self.table_registry.bool_tables.tables_2d[*connectivity_table].shape();
+
+                if table_shape != connectivity_shape {
+                    return Err(ModelErr::new(format!(
+                        "the weight table {table} has shape {table_shape:?}, but the connectivity table {connectivity_table} has shape {connectivity_shape:?}",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
+            }
+            expression::IntegerExpression::MinimumSpanningTreeWithEdges(set, edges) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+
+                for (_, _, weight) in edges {
+                    self.check_expression(weight, local_variables, allow_cost)?;
+                }
+
+                Ok(())
+            }
+            expression::IntegerExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                set,
+                edges,
+            ) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+
+                for (_, _, weight, condition) in edges {
+                    self.check_expression(weight, local_variables, allow_cost)?;
+                    self.check_expression(condition, local_variables, allow_cost)?;
+                }
+
+                Ok(())
+            }
+            expression::IntegerExpression::MinimumSpanningTreeWithSortedEdges(set, _) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
             }
             expression::IntegerExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::IntegerExpression::FromContinuous(_, continuous) => {
-                self.check_expression(continuous.as_ref(), allow_cost)
+                self.check_expression(continuous.as_ref(), local_variables, allow_cost)
             }
-            expression::IntegerExpression::Last(vector)
-            | expression::IntegerExpression::Reduce(_, vector) => {
-                self.check_expression(vector.as_ref(), allow_cost)
+            expression::IntegerExpression::Reduce(_, set, id, expression) => {
+                let n = self.local_variable_data.number_of_variables();
+                if *id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {id} >= #variables ({n})",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*id);
+                self.check_expression(expression.as_ref(), local_variables, allow_cost)?;
+
+                if remove_after {
+                    local_variables.remove(id);
+                }
+
+                Ok(())
             }
-            expression::IntegerExpression::At(vector, element) => {
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(element, allow_cost)
+            expression::IntegerExpression::FilterReduce(
+                _,
+                set,
+                filter_id,
+                reduce_id,
+                condition,
+                expression,
+            ) => {
+                let n = self.local_variable_data.number_of_variables();
+                if *filter_id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {filter_id} >= #variables ({n})",
+                    )));
+                }
+                if *reduce_id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {reduce_id} >= #variables ({n})",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*filter_id);
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                if remove_after {
+                    local_variables.remove(filter_id);
+                }
+
+                let remove_after = local_variables.insert(*reduce_id);
+                self.check_expression(expression.as_ref(), local_variables, allow_cost)?;
+                if remove_after {
+                    local_variables.remove(reduce_id);
+                }
+
+                Ok(())
             }
         }
+    }
+}
+
+fn check_fractional_knapsack_table_lengths(
+    value_len: usize,
+    weight_len: usize,
+) -> Result<(), ModelErr> {
+    if value_len != weight_len {
+        Err(ModelErr::new(format!(
+            "fractional knapsack value table length {value_len} != weight table length {weight_len}",
+        )))
+    } else {
+        Ok(())
     }
 }
 
@@ -3580,6 +3553,7 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
     fn check_expression(
         &self,
         expression: &expression::ContinuousExpression,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match expression {
@@ -3628,136 +3602,217 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
             expression::ContinuousExpression::UnaryOperation(_, x)
             | expression::ContinuousExpression::ContinuousUnaryOperation(_, x)
             | expression::ContinuousExpression::Round(_, x) => {
-                self.check_expression(x.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)
             }
             expression::ContinuousExpression::BinaryOperation(_, x, y)
             | expression::ContinuousExpression::ContinuousBinaryOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::ContinuousExpression::Cardinality(set) => {
-                self.check_expression(set, allow_cost)
-            }
-            expression::ContinuousExpression::Length(vector) => {
-                self.check_expression(vector, allow_cost)
+                self.check_expression(set, local_variables, allow_cost)
             }
             expression::ContinuousExpression::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
+                self.check_expression(table.as_ref(), local_variables, allow_cost)
+            }
+            expression::ContinuousExpression::MinimumSpanningTree(set, table) => {
+                self.table_registry.continuous_tables.check_table_2d(*table)?;
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
+            }
+            expression::ContinuousExpression::MinimumSpanningTreeWithConnectivity(
+                set,
+                table,
+                connectivity_table,
+            ) => {
+                self.table_registry.continuous_tables.check_table_2d(*table)?;
+                self.table_registry
+                    .bool_tables
+                    .check_table_2d(*connectivity_table)?;
+
+                let table_shape = self.table_registry.continuous_tables.tables_2d[*table].shape();
+                let connectivity_shape =
+                    self.table_registry.bool_tables.tables_2d[*connectivity_table].shape();
+
+                if table_shape != connectivity_shape {
+                    return Err(ModelErr::new(format!(
+                        "the weight table {table} has shape {table_shape:?}, but the connectivity table {connectivity_table} has shape {connectivity_shape:?}",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
+            }
+            expression::ContinuousExpression::MinimumSpanningTreeWithEdges(set, edges) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+
+                for (_, _, weight) in edges {
+                    self.check_expression(weight, local_variables, allow_cost)?;
+                }
+
+                Ok(())
+            }
+            expression::ContinuousExpression::MinimumSpanningTreeWithEdgesAndConnectivity(
+                set,
+                edges,
+            ) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+
+                for (_, _, weight, condition) in edges {
+                    self.check_expression(weight, local_variables, allow_cost)?;
+                    self.check_expression(condition, local_variables, allow_cost)?;
+                }
+
+                Ok(())
+            }
+            expression::ContinuousExpression::MinimumSpanningTreeWithSortedEdges(set, _) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)
             }
             expression::ContinuousExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::ContinuousExpression::FromInteger(integer) => {
-                self.check_expression(integer.as_ref(), allow_cost)
+                self.check_expression(integer.as_ref(), local_variables, allow_cost)
             }
-            expression::ContinuousExpression::Last(vector)
-            | expression::ContinuousExpression::Reduce(_, vector) => {
-                self.check_expression(vector.as_ref(), allow_cost)
-            }
-            expression::ContinuousExpression::At(vector, element) => {
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(element, allow_cost)
-            }
-        }
-    }
-}
+            expression::ContinuousExpression::Reduce(_, set, id, expression) => {
+                let n = self.local_variable_data.number_of_variables();
+                if *id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {id} >= #variables ({n})",
+                    )));
+                }
 
-impl CheckExpression<expression::IntegerVectorExpression> for Model {
-    fn check_expression(
-        &self,
-        expression: &expression::IntegerVectorExpression,
-        allow_cost: bool,
-    ) -> Result<(), ModelErr> {
-        match expression {
-            expression::IntegerVectorExpression::Constant(_) => Ok(()),
-            expression::IntegerVectorExpression::Reverse(expression)
-            | expression::IntegerVectorExpression::Pop(expression)
-            | expression::IntegerVectorExpression::UnaryOperation(_, expression) => {
-                self.check_expression(expression.as_ref(), allow_cost)
-            }
-            expression::IntegerVectorExpression::Push(integer, vector)
-            | expression::IntegerVectorExpression::BinaryOperationX(_, integer, vector)
-            | expression::IntegerVectorExpression::BinaryOperationY(_, vector, integer) => {
-                self.check_expression(integer, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)
-            }
-            expression::IntegerVectorExpression::Set(integer, vector, i) => {
-                self.check_expression(integer, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(i, allow_cost)
-            }
-            expression::IntegerVectorExpression::VectorOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
-            }
-            expression::IntegerVectorExpression::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
-            }
-            expression::IntegerVectorExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
-            }
-            expression::IntegerVectorExpression::FromContinuous(_, continuous) => {
-                self.check_expression(continuous.as_ref(), allow_cost)
-            }
-        }
-    }
-}
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*id);
+                self.check_expression(expression.as_ref(), local_variables, allow_cost)?;
 
-impl CheckExpression<expression::ContinuousVectorExpression> for Model {
-    fn check_expression(
-        &self,
-        expression: &expression::ContinuousVectorExpression,
-        allow_cost: bool,
-    ) -> Result<(), ModelErr> {
-        match expression {
-            expression::ContinuousVectorExpression::Constant(_) => Ok(()),
-            expression::ContinuousVectorExpression::Reverse(expression)
-            | expression::ContinuousVectorExpression::Pop(expression)
-            | expression::ContinuousVectorExpression::UnaryOperation(_, expression)
-            | expression::ContinuousVectorExpression::ContinuousUnaryOperation(_, expression)
-            | expression::ContinuousVectorExpression::Round(_, expression) => {
-                self.check_expression(expression.as_ref(), allow_cost)
+                if remove_after {
+                    local_variables.remove(id);
+                }
+
+                Ok(())
             }
-            expression::ContinuousVectorExpression::Push(continuous, vector)
-            | expression::ContinuousVectorExpression::BinaryOperationX(_, continuous, vector)
-            | expression::ContinuousVectorExpression::BinaryOperationY(_, vector, continuous)
-            | expression::ContinuousVectorExpression::ContinuousBinaryOperationX(
+            expression::ContinuousExpression::FilterReduce(
                 _,
-                continuous,
-                vector,
-            )
-            | expression::ContinuousVectorExpression::ContinuousBinaryOperationY(
-                _,
-                vector,
-                continuous,
+                set,
+                filter_id,
+                reduce_id,
+                condition,
+                expression,
             ) => {
-                self.check_expression(continuous, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)
+                let n = self.local_variable_data.number_of_variables();
+                if *filter_id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {filter_id} >= #variables ({n})",
+                    )));
+                }
+                if *reduce_id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {reduce_id} >= #variables ({n})",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*filter_id);
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+                if remove_after {
+                    local_variables.remove(filter_id);
+                }
+
+                let remove_after = local_variables.insert(*reduce_id);
+                self.check_expression(expression.as_ref(), local_variables, allow_cost)?;
+                if remove_after {
+                    local_variables.remove(reduce_id);
+                }
+
+                Ok(())
             }
-            expression::ContinuousVectorExpression::Set(continuous, vector, i) => {
-                self.check_expression(continuous, allow_cost)?;
-                self.check_expression(vector.as_ref(), allow_cost)?;
-                self.check_expression(i, allow_cost)
+            expression::ContinuousExpression::FractionalKnapsackSorted(set, capacity, _) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)
             }
-            expression::ContinuousVectorExpression::VectorOperation(_, x, y)
-            | expression::ContinuousVectorExpression::ContinuousVectorOperation(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+            expression::ContinuousExpression::FractionalKnapsack(set, capacity, items) => {
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)?;
+
+                for (_, v, w) in items {
+                    self.check_expression(v, local_variables, allow_cost)?;
+                    self.check_expression(w, local_variables, allow_cost)?;
+                }
+
+                Ok(())
             }
-            expression::ContinuousVectorExpression::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
+            expression::ContinuousExpression::FractionalKnapsackIntegerTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                self.table_registry.integer_tables.check_table_1d(*values)?;
+                self.table_registry.integer_tables.check_table_1d(*weights)?;
+                check_fractional_knapsack_table_lengths(
+                    self.table_registry.integer_tables.tables_1d[*values].0.len(),
+                    self.table_registry.integer_tables.tables_1d[*weights].0.len(),
+                )?;
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)
             }
-            expression::ContinuousVectorExpression::If(condition, x, y) => {
-                self.check_expression(condition.as_ref(), allow_cost)?;
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+            expression::ContinuousExpression::FractionalKnapsackContinuousTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                self.table_registry
+                    .continuous_tables
+                    .check_table_1d(*values)?;
+                self.table_registry
+                    .continuous_tables
+                    .check_table_1d(*weights)?;
+                check_fractional_knapsack_table_lengths(
+                    self.table_registry.continuous_tables.tables_1d[*values].0.len(),
+                    self.table_registry.continuous_tables.tables_1d[*weights].0.len(),
+                )?;
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)
             }
-            expression::ContinuousVectorExpression::FromInteger(integer) => {
-                self.check_expression(integer.as_ref(), allow_cost)
+            expression::ContinuousExpression::FractionalKnapsackIntegerValueContinuousWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                self.table_registry.integer_tables.check_table_1d(*values)?;
+                self.table_registry
+                    .continuous_tables
+                    .check_table_1d(*weights)?;
+                check_fractional_knapsack_table_lengths(
+                    self.table_registry.integer_tables.tables_1d[*values].0.len(),
+                    self.table_registry.continuous_tables.tables_1d[*weights].0.len(),
+                )?;
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)
+            }
+            expression::ContinuousExpression::FractionalKnapsackContinuousValueIntegerWeightTable(
+                set,
+                capacity,
+                values,
+                weights,
+            ) => {
+                self.table_registry
+                    .continuous_tables
+                    .check_table_1d(*values)?;
+                self.table_registry.integer_tables.check_table_1d(*weights)?;
+                check_fractional_knapsack_table_lengths(
+                    self.table_registry.continuous_tables.tables_1d[*values].0.len(),
+                    self.table_registry.integer_tables.tables_1d[*weights].0.len(),
+                )?;
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(capacity.as_ref(), local_variables, allow_cost)
             }
         }
     }
@@ -3767,6 +3822,7 @@ impl CheckExpression<expression::Condition> for Model {
     fn check_expression(
         &self,
         condition: &expression::Condition,
+        local_variables: &mut FxHashSet<usize>,
         allow_cost: bool,
     ) -> Result<(), ModelErr> {
         match condition {
@@ -3782,40 +3838,60 @@ impl CheckExpression<expression::Condition> for Model {
                 }
             }
             expression::Condition::Not(condition) => {
-                self.check_expression(condition.as_ref(), allow_cost)
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)
             }
             expression::Condition::And(x, y) | expression::Condition::Or(x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
+            }
+            expression::Condition::Quantified(_, set, id, condition) => {
+                let n = self.local_variable_data.number_of_variables();
+                if *id >= n {
+                    return Err(ModelErr::new(format!(
+                        "local variable id {id} >= #variables ({n})",
+                    )));
+                }
+
+                self.check_expression(set.as_ref(), local_variables, allow_cost)?;
+                let remove_after = local_variables.insert(*id);
+                self.check_expression(condition.as_ref(), local_variables, allow_cost)?;
+
+                if remove_after {
+                    local_variables.remove(id);
+                }
+
+                Ok(())
             }
             expression::Condition::ComparisonE(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::Condition::ComparisonI(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::Condition::ComparisonC(_, x, y) => {
-                self.check_expression(x.as_ref(), allow_cost)?;
-                self.check_expression(y.as_ref(), allow_cost)
+                self.check_expression(x.as_ref(), local_variables, allow_cost)?;
+                self.check_expression(y.as_ref(), local_variables, allow_cost)
             }
             expression::Condition::Set(condition) => match condition.as_ref() {
                 expression::SetCondition::Constant(_) => Ok(()),
                 expression::SetCondition::IsIn(element, set) => {
-                    self.check_expression(element, allow_cost)?;
-                    self.check_expression(set, allow_cost)
+                    self.check_expression(element, local_variables, allow_cost)?;
+                    self.check_expression(set, local_variables, allow_cost)
                 }
                 expression::SetCondition::IsSubset(x, y)
                 | expression::SetCondition::IsEqual(x, y)
                 | expression::SetCondition::IsNotEqual(x, y) => {
-                    self.check_expression(x, allow_cost)?;
-                    self.check_expression(y, allow_cost)
+                    self.check_expression(x, local_variables, allow_cost)?;
+                    self.check_expression(y, local_variables, allow_cost)
                 }
-                expression::SetCondition::IsEmpty(set) => self.check_expression(set, allow_cost),
+                expression::SetCondition::IsEmpty(set) => {
+                    self.check_expression(set, local_variables, allow_cost)
+                }
             },
             expression::Condition::Table(table) => {
-                self.check_expression(table.as_ref(), allow_cost)
+                self.check_expression(table.as_ref(), local_variables, allow_cost)
             }
         }
     }
@@ -3833,7 +3909,7 @@ mod tests {
     }
 
     #[test]
-    fn reduce_functin_default() {
+    fn reduce_function_default() {
         let reduce = ReduceFunction::default();
         assert_eq!(reduce, ReduceFunction::Min);
     }
@@ -4662,7 +4738,7 @@ mod tests {
                 ..Default::default()
             },
             target: state.clone(),
-            state_functions: StateFunctions{
+            state_functions: StateFunctions {
                 integer_function_names: vec!["sf_v1".to_string()],
                 name_to_integer_function: [("sf_v1".to_string(), 0)].into_iter().collect(),
                 integer_functions: vec![IntegerExpression::Variable(0)],
@@ -5595,15 +5671,17 @@ mod tests {
     }
 
     #[test]
-    fn vector_variable_ok() {
+    fn set_resource_variable_ok() {
         let mut model = Model::default();
         let ob = model.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let target = vec![1, 2, 4];
-        let v = model.add_vector_variable(String::from("v"), ob, target.clone());
+        let target = model.create_set(ob, &[1, 2, 4]);
+        assert!(target.is_ok());
+        let target = target.unwrap();
+        let v = model.add_set_resource_variable(String::from("v"), ob, false, target.clone());
         assert!(v.is_ok());
-        let v = model.add_vector_variable(String::from("v2"), ob, target.clone());
+        let v = model.add_set_resource_variable(String::from("v2"), ob, true, target.clone());
         assert!(v.is_ok());
         let v = v.unwrap();
         let ob2 = model.get_object_type_of(v);
@@ -5612,41 +5690,57 @@ mod tests {
         let target2 = model.get_target(v);
         assert!(target2.is_ok());
         assert_eq!(target2.unwrap(), target);
-        let target = vec![2, 4, 5];
+        let target = model.create_set(ob, &[2, 3, 5]);
+        assert!(target.is_ok());
+        let target = target.unwrap();
         let result = model.set_target(v, target.clone());
         assert!(result.is_ok());
         let target2 = model.get_target(v);
         assert!(target2.is_ok());
         assert_eq!(target2.unwrap(), target);
+        let preference = model.get_preference(v);
+        assert!(preference.is_ok());
+        assert!(preference.unwrap());
+        let result = model.set_preference(v, false);
+        assert!(result.is_ok());
+        let preference = model.get_preference(v);
+        assert!(preference.is_ok());
+        assert!(!preference.unwrap());
     }
 
     #[test]
-    fn vector_variable_err() {
+    fn set_resource_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let target = vec![1, 2, 4];
-        let v = model.add_vector_variable(String::from("v"), ob, target.clone());
+        let target = model.create_set(ob, &[1, 2, 4]);
+        assert!(target.is_ok());
+        let target = target.unwrap();
+        let v = model.add_set_resource_variable(String::from("v"), ob, false, target.clone());
         assert!(v.is_ok());
         let v = v.unwrap();
 
-        let v2 = model.add_vector_variable(String::from("v"), ob, target.clone());
+        let v2 = model.add_set_resource_variable(String::from("v"), ob, true, target.clone());
         assert!(v2.is_err());
-        let target2 = vec![10];
-        let v2 = model.add_vector_variable(String::from("v2"), ob, target2.clone());
+        let target2 = Set::with_capacity(11);
+        let v2 = model.add_set_resource_variable(String::from("v2"), ob, false, target2.clone());
         assert!(v2.is_err());
         let result = model.set_target(v, target2);
         assert!(result.is_err());
 
         let mut model = Model::default();
-        let v2 = model.add_vector_variable(String::from("v3"), ob, target.clone());
+        let v2 = model.add_set_resource_variable(String::from("v3"), ob, true, target.clone());
         assert!(v2.is_err());
         let ob2 = model.get_object_type_of(v);
         assert!(ob2.is_err());
         let target2 = model.get_target(v);
         assert!(target2.is_err());
         let result = model.set_target(v, target);
+        assert!(result.is_err());
+        let preference = model.get_preference(v);
+        assert!(preference.is_err());
+        let result = model.set_preference(v, false);
         assert!(result.is_err());
     }
 
@@ -6049,14 +6143,6 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(t.id(), 1);
-        let t = model.add_table_1d(String::from("t1"), vec![vec![1, 2], vec![1, 2]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 0);
-        let t = model.add_table_1d(String::from("t2"), vec![vec![1, 2], vec![1, 2]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 1);
         let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
         assert!(t.is_ok());
         let t = t.unwrap();
@@ -6091,10 +6177,6 @@ mod tests {
         let t = model.add_table_1d(String::from("t1"), vec![true]);
         assert!(t.is_ok());
         let t = model.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_err());
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
         assert!(t.is_err());
         let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
         assert!(t.is_ok());
@@ -6370,16 +6452,6 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(t.id(), 1);
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 0);
-        let mut name_to_table = FxHashMap::default();
-        name_to_table.insert(String::from("t1"), 0);
-        let t = model.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 1);
         let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
         assert!(t.is_ok());
         let t = t.unwrap();
@@ -6422,12 +6494,6 @@ mod tests {
         let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
         assert!(t.is_ok());
         let t = model.add_table_2d(String::from("t1"), vec![vec![true]]);
-        assert!(t.is_err());
-        let mut name_to_table = FxHashMap::default();
-        name_to_table.insert(String::from("t1"), 0);
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
         assert!(t.is_err());
         let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("t1"), 0);
@@ -6689,14 +6755,6 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(t.id(), 1);
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 0);
-        let t = model.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 1);
         let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
@@ -6731,10 +6789,6 @@ mod tests {
         let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
         assert!(t.is_ok());
         let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_err());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
         assert!(t.is_err());
         let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
         assert!(t.is_ok());
@@ -7021,19 +7075,6 @@ mod tests {
         assert_eq!(t.id(), 1);
 
         let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 0);
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], vec![2]);
-        let t = model.add_table(String::from("t2"), map2.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        assert_eq!(t.id(), 1);
-
-        let mut map = FxHashMap::default();
         map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
         let t = model.add_table(String::from("t1"), map.clone(), Set::default());
         assert!(t.is_ok());
@@ -7082,13 +7123,6 @@ mod tests {
         let t = model.add_table(String::from("t1"), map.clone(), false);
         assert!(t.is_ok());
         let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_err());
-
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
         assert!(t.is_err());
 
         let mut map = FxHashMap::default();
@@ -7757,36 +7791,7 @@ mod tests {
     }
 
     #[test]
-    fn get_forward_transition_ok() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_forward_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-        let result = model.get_transition(&id);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), &transition);
-    }
-
-    #[test]
-    fn get_forward_transition_err() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_forward_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-
-        let model = Model::default();
-        let result = model.get_transition(&id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_forward_transition_ok() {
+    fn add_forward_transition_integer_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -7798,9 +7803,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("srv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("srv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -7833,9 +7838,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -7889,21 +7891,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -7934,6 +7921,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -7975,9 +7980,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![
@@ -8022,20 +8024,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -8047,6 +8035,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -8065,7 +8069,10 @@ mod tests {
                 }
             ]
         );
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -8077,9 +8084,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("sv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("sv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -8112,9 +8119,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8168,21 +8172,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -8213,6 +8202,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -8254,9 +8261,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![
@@ -8301,20 +8305,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -8326,6 +8316,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -8373,9 +8379,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8415,9 +8418,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8458,9 +8458,6 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8473,7 +8470,7 @@ mod tests {
     }
 
     #[test]
-    fn add_forward_transition_err() {
+    fn add_forward_transition_continuous_cost_for_integer_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -8483,7 +8480,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_no_integer_variable_in_cost_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -8493,7 +8493,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_cost_for_continuous_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -8503,7 +8506,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_no_continuous_variable_in_cost() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -8513,14 +8519,20 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_no_set_variable_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             elements_in_set_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_out_of_bound_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8533,27 +8545,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
-        let mut model = Model::default();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_forward_transition(transition).is_err());
-
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_forward_transition(transition).is_err());
-
+    #[test]
+    fn add_forward_transition_no_set_variable_in_grounded_condition() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -8563,7 +8558,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_out_of_bound_in_grounded_condition() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8579,33 +8577,68 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_no_set_resource_variable_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
-            preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0, 10)],
-                ..Default::default()
-            }],
+            elements_in_set_resource_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_out_of_bound_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
+            elements_in_set_resource_variable: vec![(v.id(), 11)],
+            ..Default::default()
+        };
+        assert!(model.add_forward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_transition_no_set_resource_variable_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11, 10)],
+                elements_in_set_resource_variable: vec![(0, 0)],
                 ..Default::default()
             }],
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_out_of_bound_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type("something", 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let transition = Transition {
+            preconditions: vec![GroundedCondition {
+                elements_in_set_variable: vec![(v.id(), 11)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(model.add_forward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_transition_invalid_precondition_err() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -8619,7 +8652,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8632,7 +8668,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8651,7 +8690,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8680,56 +8722,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     v.id(),
-                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_set_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![
+                set_effects: vec![
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                 ],
                 ..Default::default()
@@ -8737,7 +8792,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8747,7 +8805,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8763,7 +8824,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8782,7 +8846,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8792,7 +8859,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8808,7 +8878,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_element_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -8827,7 +8900,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8837,7 +8913,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -8850,7 +8929,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -8866,7 +8948,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_resource_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8876,7 +8961,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_resource_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -8889,7 +8977,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_integer_resource_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -8905,7 +8996,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8915,7 +9009,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -8928,7 +9025,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -8944,7 +9044,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -8954,7 +9057,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -8970,7 +9076,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_transition_continuous_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -9130,36 +9239,7 @@ mod tests {
     }
 
     #[test]
-    fn get_forward_forced_transition_ok() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_forward_forced_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-        let result = model.get_transition(&id);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), &transition);
-    }
-
-    #[test]
-    fn get_forward_forced_transition_err() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_forward_forced_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-
-        let model = Model::default();
-        let result = model.get_transition(&id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_forward_forced_transition_ok() {
+    fn add_forward_forced_transition_integer_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9171,9 +9251,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("srv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("srv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -9206,9 +9286,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9262,21 +9339,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -9307,6 +9369,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -9348,9 +9428,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![
@@ -9395,20 +9472,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -9420,6 +9483,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -9438,7 +9517,10 @@ mod tests {
                 }
             ]
         );
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -9450,9 +9532,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("sv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("sv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -9485,9 +9567,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9541,21 +9620,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -9586,6 +9650,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -9627,9 +9709,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![
@@ -9674,20 +9753,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -9699,6 +9764,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -9722,7 +9803,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table1d_ok() {
         // Test success when the model that has only one Int table 1D,
-        // and using the constants inside in a forward forced transition.
+        // and using the constants inside in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9746,9 +9827,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9763,7 +9841,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table2d_ok() {
         // Test success when the model that has only one Int table 2D,
-        // and using the constants inside in a forward forced transition.
+        // and using the constants inside in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9788,9 +9866,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9805,7 +9880,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table3d_ok() {
         // Test success when the model that has only one Int table 3D,
-        // and using the constants inside in a forward forced transition.
+        // and using the constants inside in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9831,9 +9906,6 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9846,7 +9918,7 @@ mod tests {
     }
 
     #[test]
-    fn add_forward_forced_transition_err() {
+    fn add_forward_forced_transition_continuous_cost_for_integer_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9856,7 +9928,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_no_integer_variable_in_cost_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -9866,7 +9941,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_cost_for_continuous_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -9876,7 +9954,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_no_continuous_variable_in_cost() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -9886,14 +9967,20 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_no_set_variable_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             elements_in_set_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_out_of_bound_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -9906,27 +9993,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
-        let mut model = Model::default();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_forward_forced_transition(transition).is_err());
-
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_forward_forced_transition(transition).is_err());
-
+    #[test]
+    fn add_forward_forced_transition_no_set_variable_in_grounded_condition() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -9936,7 +10006,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_out_of_bound_in_grounded_condition() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -9952,33 +10025,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_no_set_resource_variable_in_element_in_set_resource_variable_err(
+    ) {
         let mut model = Model::default();
         let transition = Transition {
-            preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0, 10)],
-                ..Default::default()
-            }],
+            elements_in_set_resource_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_out_of_bound_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
+            elements_in_set_resource_variable: vec![(v.id(), 11)],
+            ..Default::default()
+        };
+        assert!(model.add_forward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_forced_transition_no_set_resource_variable_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11, 10)],
+                elements_in_set_resource_variable: vec![(0, 0)],
                 ..Default::default()
             }],
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_out_of_bound_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type("something", 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let transition = Transition {
+            preconditions: vec![GroundedCondition {
+                elements_in_set_variable: vec![(v.id(), 11)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(model.add_forward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_forced_transition_invalid_precondition_err() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -9992,7 +10101,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10005,7 +10117,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10024,7 +10139,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10053,56 +10171,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     v.id(),
-                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_set_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![
+                set_effects: vec![
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                 ],
                 ..Default::default()
@@ -10110,7 +10241,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10120,7 +10254,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10136,7 +10273,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10155,7 +10295,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10165,7 +10308,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10181,7 +10327,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_element_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -10200,7 +10349,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10210,7 +10362,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -10223,7 +10378,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -10239,7 +10397,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_resource_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10249,7 +10410,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_resource_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -10262,7 +10426,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_integer_resource_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -10278,7 +10445,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10288,7 +10458,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -10301,7 +10474,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -10317,7 +10493,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -10327,7 +10506,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -10343,7 +10525,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_forward_forced_transition_continuous_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -10364,7 +10549,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table1d_err() {
         // Test failure when the model that has only one Int table 1D, but try to use the constants
-        // inside a Int table 2D or 3D in a forward forced transition.
+        // inside a Int table 2D or 3D in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -10412,7 +10597,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table2d_err() {
         // Test failure when the model that has only one Int table 2D, but try to use the constants
-        // inside a Int table 1D or 3D in a forward forced transition.
+        // inside a Int table 1D or 3D in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -10459,7 +10644,7 @@ mod tests {
     #[test]
     fn add_forward_forced_transition_with_table3d_err() {
         // Test failure when the model that has only one Int table 3D, but try to use the constants
-        // inside a Int table 1D or 2D in a forward forced transition.
+        // inside a Int table 1D or 2D in a forward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -10503,36 +10688,7 @@ mod tests {
     }
 
     #[test]
-    fn get_backward_transition_ok() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_backward_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-        let result = model.get_transition(&id);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), &transition);
-    }
-
-    #[test]
-    fn get_backward_transition_err() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_backward_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-
-        let model = Model::default();
-        let result = model.get_transition(&id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_backward_transition_ok() {
+    fn add_backward_transition_integer_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -10544,9 +10700,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("srv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("srv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -10579,9 +10735,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10635,21 +10788,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -10680,6 +10818,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -10721,9 +10877,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![
@@ -10768,20 +10921,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -10793,6 +10932,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -10811,7 +10966,10 @@ mod tests {
                 }
             ]
         );
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -10823,9 +10981,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("sv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("sv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -10858,9 +11016,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10914,21 +11069,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -10959,6 +11099,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -11000,9 +11158,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![
@@ -11047,20 +11202,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -11072,6 +11213,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -11119,9 +11276,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -11161,9 +11315,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -11204,9 +11355,6 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(!id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -11219,7 +11367,7 @@ mod tests {
     }
 
     #[test]
-    fn add_backward_transition_err() {
+    fn add_backward_transition_continuous_cost_for_integer_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -11229,7 +11377,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_no_integer_variable_in_cost_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -11239,7 +11390,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_cost_for_continuous_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -11249,7 +11403,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_no_continuous_variable_in_cost() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -11259,14 +11416,20 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_no_set_variable_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             elements_in_set_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_out_of_bound_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11279,27 +11442,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
-        let mut model = Model::default();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_backward_transition(transition).is_err());
-
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_backward_transition(transition).is_err());
-
+    #[test]
+    fn add_backward_transition_no_set_variable_in_grounded_condition() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -11309,7 +11455,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_out_of_bound_in_grounded_condition() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11325,33 +11474,68 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_no_set_resource_variable_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
-            preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0, 10)],
-                ..Default::default()
-            }],
+            elements_in_set_resource_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_out_of_bound_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
+            elements_in_set_resource_variable: vec![(v.id(), 11)],
+            ..Default::default()
+        };
+        assert!(model.add_backward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_transition_no_set_resource_variable_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11, 10)],
+                elements_in_set_resource_variable: vec![(0, 0)],
                 ..Default::default()
             }],
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_out_of_bound_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type("something", 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let transition = Transition {
+            preconditions: vec![GroundedCondition {
+                elements_in_set_variable: vec![(v.id(), 11)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(model.add_backward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_transition_invalid_precondition_err() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -11365,7 +11549,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11378,7 +11565,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11397,7 +11587,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11426,56 +11619,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     v.id(),
-                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_set_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![
+                set_effects: vec![
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                 ],
                 ..Default::default()
@@ -11483,7 +11689,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11493,7 +11702,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11509,7 +11721,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11528,7 +11743,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11538,7 +11756,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11554,7 +11775,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_element_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -11573,7 +11797,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11583,7 +11810,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -11596,7 +11826,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -11612,7 +11845,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_resource_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11622,7 +11858,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_resource_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -11635,7 +11874,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_integer_resource_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -11651,7 +11893,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11661,7 +11906,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -11674,7 +11922,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -11690,7 +11941,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -11700,7 +11954,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -11716,7 +11973,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_transition_continuous_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -11857,7 +12117,7 @@ mod tests {
         let result = model.add_backward_transition(transition);
         assert!(result.is_err());
 
-        //Try to access the element at index [0,0] in the first 2D Integer Table
+        // Try to access the element at index [0,0] in the first 2D Integer Table
         let transition = Transition {
             cost: CostExpression::Integer(
                 IntegerExpression::Cost
@@ -11876,36 +12136,7 @@ mod tests {
     }
 
     #[test]
-    fn get_backward_forced_transition_ok() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_backward_forced_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-        let result = model.get_transition(&id);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), &transition);
-    }
-
-    #[test]
-    fn get_backward_forced_transition_err() {
-        let mut model = Model::default();
-        let transition = Transition::new("transition");
-
-        let result = model.add_backward_forced_transition(transition.clone());
-        assert!(result.is_ok());
-
-        let id = result.unwrap();
-
-        let model = Model::default();
-        let result = model.get_transition(&id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_backward_forced_transition_ok() {
+    fn add_backward_forced_transition_integer_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -11917,9 +12148,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("srv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("srv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -11952,9 +12183,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12008,21 +12236,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -12053,6 +12266,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -12094,9 +12325,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![
@@ -12141,20 +12369,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -12166,6 +12380,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -12184,7 +12414,10 @@ mod tests {
                 }
             ]
         );
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_cost_ok() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -12196,9 +12429,9 @@ mod tests {
         assert!(v.is_ok());
         let v = model.add_set_variable("sv2", ob, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv1", ob, vec![]);
+        let v = model.add_set_resource_variable("sv1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
-        let v = model.add_vector_variable("vv2", ob, vec![]);
+        let v = model.add_set_resource_variable("sv2", ob, true, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = model.add_element_variable("ev1", ob, 0);
         assert!(v.is_ok());
@@ -12231,9 +12464,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12287,21 +12517,6 @@ mod tests {
                         ),
                     ),
                 ],
-                vector_effects: vec![
-                    (
-                        0,
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-                    ),
-                    (
-                        1,
-                        VectorExpression::Push(
-                            ElementExpression::Constant(0),
-                            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                                vec![1, 2],
-                            ))),
-                        ),
-                    ),
-                ],
                 element_effects: vec![
                     (0, ElementExpression::Constant(0)),
                     (
@@ -12332,6 +12547,24 @@ mod tests {
                             BinaryOperator::Add,
                             Box::new(ContinuousExpression::Constant(1.0)),
                             Box::new(ContinuousExpression::Constant(1.0)),
+                        ),
+                    ),
+                ],
+                set_resource_effects: vec![
+                    (
+                        0,
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
+                    ),
+                    (
+                        1,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10),
+                            ))),
                         ),
                     ),
                 ],
@@ -12373,9 +12606,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![
@@ -12420,20 +12650,6 @@ mod tests {
                                 },)),
                             ),
                         ],
-                        vector_effects: vec![
-                            (
-                                0,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2
-                                ])),
-                            ),
-                            (
-                                1,
-                                VectorExpression::Reference(ReferenceExpression::Constant(vec![
-                                    1, 2, 0
-                                ])),
-                            ),
-                        ],
                         element_effects: vec![
                             (0, ElementExpression::Constant(0)),
                             (1, ElementExpression::Constant(2)),
@@ -12445,6 +12661,22 @@ mod tests {
                         continuous_effects: vec![
                             (0, ContinuousExpression::Constant(0.0)),
                             (1, ContinuousExpression::Constant(2.0)),
+                        ],
+                        set_resource_effects: vec![
+                            (
+                                0,
+                                SetExpression::Reference(ReferenceExpression::Constant(
+                                    Set::with_capacity(10),
+                                )),
+                            ),
+                            (
+                                1,
+                                SetExpression::Reference(ReferenceExpression::Constant({
+                                    let mut set = Set::with_capacity(10);
+                                    set.insert(1);
+                                    set
+                                },)),
+                            ),
                         ],
                         element_resource_effects: vec![
                             (0, ElementExpression::Constant(0)),
@@ -12468,7 +12700,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table1d_ok() {
         // Test success when the model that has only one Int table 1D,
-        // and using the constants inside in a backward forced transition.
+        // and using the constants inside in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -12492,9 +12724,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12509,7 +12738,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table2d_ok() {
         // Test success when the model that has only one Int table 2D,
-        // and using the constants inside in a backward forced transition.
+        // and using the constants inside in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -12534,9 +12763,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12551,7 +12777,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table3d_ok() {
         // Test success when the model that has only one Int table 3D,
-        // and using the constants inside in a backward forced transition.
+        // and using the constants inside in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -12577,9 +12803,6 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
-        let id = result.unwrap();
-        assert!(id.forced);
-        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12592,7 +12815,7 @@ mod tests {
     }
 
     #[test]
-    fn add_backward_forced_transition_err() {
+    fn add_backward_forced_transition_continuous_cost_for_integer_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -12602,7 +12825,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_no_integer_variable_in_cost_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -12612,7 +12838,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_cost_for_continuous_cost_model_err() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -12622,7 +12851,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_no_continuous_variable_in_cost() {
         let mut model = Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -12632,14 +12864,20 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_no_set_variable_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             elements_in_set_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_out_of_bound_in_element_in_set_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12652,27 +12890,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
-        let mut model = Model::default();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_backward_forced_transition(transition).is_err());
-
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11, 10)],
-            ..Default::default()
-        };
-        assert!(model.add_backward_forced_transition(transition).is_err());
-
+    #[test]
+    fn add_backward_forced_transition_no_set_variable_in_grounded_condition() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -12682,7 +12903,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_out_of_bound_in_grounded_condition() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12698,33 +12922,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_no_set_resource_variable_in_element_in_set_resource_variable_err(
+    ) {
         let mut model = Model::default();
         let transition = Transition {
-            preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0, 10)],
-                ..Default::default()
-            }],
+            elements_in_set_resource_variable: vec![(0, 0)],
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_out_of_bound_in_element_in_set_resource_variable_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
+            elements_in_set_resource_variable: vec![(v.id(), 11)],
+            ..Default::default()
+        };
+        assert!(model.add_backward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_forced_transition_no_set_resource_variable_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11, 10)],
+                elements_in_set_resource_variable: vec![(0, 0)],
                 ..Default::default()
             }],
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_out_of_bound_in_grounded_condition_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type("something", 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let transition = Transition {
+            preconditions: vec![GroundedCondition {
+                elements_in_set_variable: vec![(v.id(), 11)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(model.add_backward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_forced_transition_invalid_precondition_err() {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
@@ -12738,7 +12998,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -12751,7 +13014,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12770,7 +13036,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12799,56 +13068,69 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![(
+                set_resource_effects: vec![(
                     v.id(),
-                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(1)),
                 )],
                 ..Default::default()
             },
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_set_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = model.add_vector_variable("v1", ob, vec![0, 1]);
+        let v = model.add_set_resource_variable("v1", ob, false, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
             effect: Effect {
-                vector_effects: vec![
+                set_effects: vec![
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                     (
                         v.id(),
-                        VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                        SetExpression::Reference(ReferenceExpression::Constant(
+                            Set::with_capacity(10),
+                        )),
                     ),
                 ],
                 ..Default::default()
@@ -12856,7 +13138,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -12866,7 +13151,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12882,7 +13170,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12901,7 +13192,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -12911,7 +13205,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12927,7 +13224,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_element_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
@@ -12946,7 +13246,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -12956,7 +13259,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -12969,7 +13275,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_variable("v1", 0);
         assert!(v.is_ok());
@@ -12985,7 +13294,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_resource_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -12995,7 +13307,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_resource_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -13008,7 +13323,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_integer_resource_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_integer_resource_variable("v1", false, 0);
         assert!(v.is_ok());
@@ -13024,7 +13342,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -13034,7 +13355,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -13047,7 +13371,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_variable("v1", 0.0);
         assert!(v.is_ok());
@@ -13063,7 +13390,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_resource_effect_invalid_variable_err() {
         let mut model = Model::default();
         let transition = Transition {
             effect: Effect {
@@ -13073,7 +13403,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_resource_effect_invalid_expression_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -13089,7 +13422,10 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
 
+    #[test]
+    fn add_backward_forced_transition_continuous_resource_effect_duplicate_err() {
         let mut model = Model::default();
         let v = model.add_continuous_resource_variable("v1", false, 0.0);
         assert!(v.is_ok());
@@ -13110,7 +13446,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table1d_err() {
         // Test failure when the model that has only one Int table 1D, but try to use the constants
-        // inside a Int table 2D or 3D in a backward forced transition.
+        // inside a Int table 2D or 3D in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -13158,7 +13494,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table2d_err() {
         // Test failure when the model that has only one Int table 2D, but try to use the constants
-        // inside a Int table 1D or 3D in a backward forced transition.
+        // inside a Int table 1D or 3D in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -13205,7 +13541,7 @@ mod tests {
     #[test]
     fn add_backward_forced_transition_with_table3d_err() {
         // Test failure when the model that has only one Int table 3D, but try to use the constants
-        // inside a Int table 1D or 2D in a backward forced transition.
+        // inside a Int table 1D or 2D in a backward transition.
         let mut model = Model {
             cost_type: CostType::Integer,
             ..Default::default()
@@ -13245,496 +13581,6 @@ mod tests {
             ..Default::default()
         };
         let result = model.add_backward_forced_transition(transition);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_ok() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let result = model.add_transition_dominance(&dominating, &dominated);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn add_transition_dominance_dominating_forced_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_forced_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let result = model.add_transition_dominance(&dominating, &dominated);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_dominated_forced_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_forced_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let result = model.add_transition_dominance(&dominating, &dominated);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_forward_backward_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_backward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let result = model.add_transition_dominance(&dominating, &dominated);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_same_id_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_transition_dominance(&dominating, &dominating);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_not_exist_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let mut model = Model::default();
-
-        let result = model.add_transition_dominance(&dominating, &dominated);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_ok() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let conditions = vec![
-            Condition::comparison_i(ComparisonOperator::Ge, v, 0),
-            Condition::comparison_i(ComparisonOperator::Le, v, 3),
-        ];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_dominating_forced_err() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let result = model.add_forward_forced_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_dominated_forced_err() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_forced_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_forward_backward_err() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_backward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_same_id_err() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominating, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_not_exist_err() {
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn add_transition_dominance_with_conditions_condition_err() {
-        let mut model = Model::default();
-
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-
-        let mut model = Model::default();
-
-        let result = model.add_forward_transition(Transition::new("dominating"));
-        assert!(result.is_ok());
-        let dominating = result.unwrap();
-
-        let result = model.add_forward_transition(Transition::new("dominated"));
-        assert!(result.is_ok());
-        let dominated = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
-
-        let result =
-            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn is_transition_dominated_forward_ok() {
-        let mut model = Model::default();
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_forward_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_forward_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-        let mut transition3 = Transition::new("transition3");
-        // precondition not satisfied
-        transition3.add_precondition(Condition::comparison_i(ComparisonOperator::Eq, v, 1));
-        let result = model.add_forward_transition(transition3);
-        assert!(result.is_ok());
-        let id3 = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
-        let result = model.add_transition_dominance_with_conditions(&id1, &id2, conditions);
-        assert!(result.is_ok());
-        // conditions not satisfied
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 1)];
-        let result = model.add_transition_dominance_with_conditions(&id2, &id1, conditions);
-        assert!(result.is_ok());
-        let result = model.add_transition_dominance(&id3, &id1);
-        assert!(result.is_ok());
-        let result = model.add_transition_dominance(&id3, &id2);
-        assert!(result.is_ok());
-
-        let state = &model.target;
-
-        // not dominated
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        // dominated
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-
-        // not applicable
-        let result = model.is_transition_dominated(state, &id3);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_forward_forced_ok() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_forward_forced_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_forward_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_forward_forced_forced_ok() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_forward_forced_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_forward_forced_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_forward_err() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_backward_transition(transition1);
-        assert!(result.is_ok());
-
-        let id = TransitionId {
-            id: 0,
-            forced: false,
-            backward: false,
-        };
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn is_transition_dominated_backward_ok() {
-        let mut model = Model::default();
-        let result = model.add_integer_variable("v", 0);
-        assert!(result.is_ok());
-        let v = result.unwrap();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_backward_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_backward_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-        let mut transition3 = Transition::new("transition3");
-        // precondition not satisfied
-        transition3.add_precondition(Condition::comparison_i(ComparisonOperator::Eq, v, 1));
-        let result = model.add_backward_transition(transition3);
-        assert!(result.is_ok());
-        let id3 = result.unwrap();
-
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
-        let result = model.add_transition_dominance_with_conditions(&id1, &id2, conditions);
-        assert!(result.is_ok());
-        // conditions not satisfied
-        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 1)];
-        let result = model.add_transition_dominance_with_conditions(&id2, &id1, conditions);
-        assert!(result.is_ok());
-        let result = model.add_transition_dominance(&id3, &id1);
-        assert!(result.is_ok());
-        let result = model.add_transition_dominance(&id3, &id2);
-        assert!(result.is_ok());
-
-        let state = &model.target;
-
-        // not dominated
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        // dominated
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-
-        // not applicable
-        let result = model.is_transition_dominated(state, &id3);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_backward_forced_ok() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_backward_forced_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_backward_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_backward_forced_forced_ok() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_backward_forced_transition(transition1);
-        assert!(result.is_ok());
-        let id1 = result.unwrap();
-        let transition2 = Transition::new("transition2");
-        let result = model.add_backward_forced_transition(transition2);
-        assert!(result.is_ok());
-        let id2 = result.unwrap();
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id1);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-
-        let result = model.is_transition_dominated(state, &id2);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-    }
-
-    #[test]
-    fn is_transition_dominated_backward_err() {
-        let mut model = Model::default();
-        let transition1 = Transition::new("transition1");
-        let result = model.add_forward_transition(transition1);
-        assert!(result.is_ok());
-
-        let id = TransitionId {
-            id: 0,
-            forced: false,
-            backward: true,
-        };
-
-        let state = &model.target;
-
-        let result = model.is_transition_dominated(state, &id);
         assert!(result.is_err());
     }
 
@@ -13818,6 +13664,26 @@ mod tests {
         assert!(model
             .add_dual_bound(ContinuousExpression::Variable(0))
             .is_err());
+    }
+
+    #[test]
+    fn add_dual_bound_fractional_knapsack_table_length_mismatch_err() {
+        let mut model = Model {
+            cost_type: CostType::Continuous,
+            ..Default::default()
+        };
+        let values = model.add_table_1d("values", vec![1, 2, 3]).unwrap();
+        let weights = model.add_table_1d("weights", vec![1, 2]).unwrap();
+
+        let set = Set::with_capacity(1);
+        let expression = ContinuousExpression::FractionalKnapsackIntegerTable(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            Box::new(ContinuousExpression::Constant(1.0)),
+            values.id(),
+            weights.id(),
+        );
+
+        assert!(model.add_dual_bound(expression).is_err());
     }
 
     #[test]
@@ -13934,21 +13800,33 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::TableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             expression::TableExpression::<Element>::Table1D(0, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Element>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Element>::Table3D(
             0,
@@ -13956,8 +13834,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Element>::Table(
             0,
@@ -13968,8 +13850,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -13999,37 +13885,57 @@ mod tests {
 
         let expression =
             expression::TableExpression::<Element>::Table1D(1, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression =
             expression::TableExpression::<Element>::Table1D(0, ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table2D(
             1,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table2D(
             0,
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table3D(
             1,
@@ -14037,8 +13943,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table3D(
             0,
@@ -14046,8 +13956,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table3D(
             0,
@@ -14055,8 +13969,12 @@ mod tests {
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table3D(
             0,
@@ -14064,8 +13982,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table(
             1,
@@ -14076,8 +13998,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Element>::Table(
             0,
@@ -14088,8 +14014,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -14122,21 +14052,33 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::TableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             expression::TableExpression::<Set>::Table1D(0, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Set>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Set>::Table3D(
             0,
@@ -14144,8 +14086,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<Set>::Table(
             0,
@@ -14156,8 +14102,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -14190,47 +14140,75 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::TableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             expression::TableExpression::<Set>::Table1D(0, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             expression::TableExpression::<Set>::Table1D(1, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression =
             expression::TableExpression::<Set>::Table1D(0, ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table2D(
             1,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table2D(
             0,
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table3D(
             1,
@@ -14238,8 +14216,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table3D(
             0,
@@ -14247,8 +14229,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table3D(
             0,
@@ -14256,8 +14242,12 @@ mod tests {
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table3D(
             0,
@@ -14265,8 +14255,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table(
             1,
@@ -14277,8 +14271,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<Set>::Table(
             0,
@@ -14289,200 +14287,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_vector_table_expression_ok() {
-        let mut model = Model::default();
-        let t = TableInterface::<Vector>::add_table_1d(
-            &mut model,
-            String::from("t1"),
-            vec![vec![0], vec![1]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![vec![0], vec![1]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![vec![0], vec![1]]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table(
-            &mut model,
-            String::from("t3"),
-            FxHashMap::default(),
-            vec![0],
-        );
-        assert!(t.is_ok());
-
-        let expression = expression::TableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            expression::TableExpression::<Vector>::Table1D(0, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableExpression::<Vector>::Table2D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableExpression::<Vector>::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableExpression::<Vector>::Table(
-            0,
-            vec![
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_vector_table_expression_err() {
-        let mut model = Model::default();
-        let t = TableInterface::<Vector>::add_table_1d(
-            &mut model,
-            String::from("t1"),
-            vec![vec![0], vec![1]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![vec![0], vec![1]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![vec![0], vec![1]]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Vector>::add_table(
-            &mut model,
-            String::from("t4"),
-            FxHashMap::default(),
-            vec![0],
-        );
-        assert!(t.is_ok());
-
-        let expression =
-            expression::TableExpression::<Vector>::Table1D(1, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression =
-            expression::TableExpression::<Vector>::Table1D(0, ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table2D(
-            1,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table2D(
-            0,
-            ElementExpression::Variable(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table2D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table3D(
-            1,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table3D(
-            0,
-            ElementExpression::Variable(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table(
-            1,
-            vec![
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableExpression::<Vector>::Table(
-            0,
-            vec![
-                ElementExpression::Variable(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -14512,21 +14322,33 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::TableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             expression::TableExpression::<bool>::Table1D(0, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<bool>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<bool>::Table3D(
             0,
@@ -14534,8 +14356,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::TableExpression::<bool>::Table(
             0,
@@ -14546,8 +14372,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -14578,37 +14408,57 @@ mod tests {
 
         let expression =
             expression::TableExpression::<bool>::Table1D(1, ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression =
             expression::TableExpression::<bool>::Table1D(0, ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table2D(
             1,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table2D(
             0,
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table3D(
             1,
@@ -14616,8 +14466,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table3D(
             0,
@@ -14625,8 +14479,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table3D(
             0,
@@ -14634,8 +14492,12 @@ mod tests {
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table3D(
             0,
@@ -14643,8 +14505,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table(
             1,
@@ -14655,8 +14521,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::TableExpression::<bool>::Table(
             0,
@@ -14667,43 +14537,53 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
     fn check_argument_expression_ok() {
         let model = Model::default();
         let expression = ArgumentExpression::Element(ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
         let expression = ArgumentExpression::Set(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-        let expression = ArgumentExpression::Vector(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
     fn check_argument_expression_err() {
         let model = Model::default();
         let expression = ArgumentExpression::Element(ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
         let expression =
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-        let expression = ArgumentExpression::Vector(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -14732,39 +14612,47 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::NumericTableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table1D(
             0,
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
             ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
             ReduceOperator::Sum,
@@ -14772,35 +14660,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -14808,8 +14673,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -14817,26 +14686,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3D(
             0,
@@ -14844,8 +14699,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
             ReduceOperator::Sum,
@@ -14854,12 +14713,19 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(2);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::Table(
             0,
@@ -14870,8 +14736,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Integer>::TableReduce(
             ReduceOperator::Sum,
@@ -14882,13 +14752,20 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -14920,71 +14797,83 @@ mod tests {
             1,
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table1D(
             0,
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
             ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
             ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2D(
             1,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2D(
             0,
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
             ReduceOperator::Sum,
@@ -14992,8 +14881,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15001,8 +14894,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15010,89 +14907,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15100,8 +14920,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15109,8 +14933,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15118,8 +14946,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15127,8 +14959,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15136,8 +14972,12 @@ mod tests {
             ElementExpression::Variable(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15145,62 +14985,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            1,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Variable(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3D(
             1,
@@ -15208,8 +14998,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3D(
             0,
@@ -15217,8 +15011,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3D(
             0,
@@ -15226,8 +15024,12 @@ mod tests {
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3D(
             0,
@@ -15235,8 +15037,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15245,12 +15051,16 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15259,24 +15069,32 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
             ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15285,12 +15103,14 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table(
             1,
@@ -15301,8 +15121,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::Table(
             0,
@@ -15313,8 +15137,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::TableReduce(
             ReduceOperator::Sum,
@@ -15325,13 +15153,17 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    Set::with_capacity(2),
+                ))),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Integer>::TableReduce(
             ReduceOperator::Sum,
@@ -15342,13 +15174,17 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    Set::with_capacity(2),
+                ))),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -15381,39 +15217,47 @@ mod tests {
         assert!(t.is_ok());
 
         let expression = expression::NumericTableExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table1D(
             0,
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
             ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15421,35 +15265,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15457,8 +15278,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15466,26 +15291,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3D(
             0,
@@ -15493,8 +15304,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15503,12 +15318,16 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table(
             0,
@@ -15519,8 +15338,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
             ReduceOperator::Sum,
@@ -15531,13 +15354,17 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    Set::with_capacity(2),
+                ))),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -15573,71 +15400,83 @@ mod tests {
             1,
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table1D(
             0,
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
             ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
             ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2D(
             1,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2D(
             0,
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15645,8 +15484,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15654,8 +15497,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
             ReduceOperator::Sum,
@@ -15663,89 +15510,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            1,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15753,8 +15523,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15762,8 +15536,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
             ReduceOperator::Sum,
@@ -15771,8 +15549,12 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15780,8 +15562,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15789,8 +15575,12 @@ mod tests {
             ElementExpression::Variable(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
             ReduceOperator::Sum,
@@ -15798,62 +15588,12 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            1,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Variable(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3D(
             1,
@@ -15861,8 +15601,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3D(
             0,
@@ -15870,8 +15614,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3D(
             0,
@@ -15879,8 +15627,12 @@ mod tests {
             ElementExpression::Variable(0),
             ElementExpression::Constant(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3D(
             0,
@@ -15888,8 +15640,12 @@ mod tests {
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15898,12 +15654,16 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15912,24 +15672,32 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
             ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
             ReduceOperator::Sum,
@@ -15938,12 +15706,14 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                 Set::with_capacity(2),
             ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table(
             1,
@@ -15954,8 +15724,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::Table(
             0,
@@ -15966,8 +15740,12 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
             ReduceOperator::Sum,
@@ -15978,13 +15756,17 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    Set::with_capacity(2),
+                ))),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
             ReduceOperator::Sum,
@@ -15995,969 +15777,17 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_vector_or_element_expression_ok() {
-        let model = Model::default();
-        let expression = VectorOrElementExpression::Element(ElementExpression::Constant(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-        let expression = VectorOrElementExpression::Vector(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_vector_or_element_expression_err() {
-        let model = Model::default();
-        let expression = VectorOrElementExpression::Element(ElementExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-        let expression = VectorOrElementExpression::Vector(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_integer_table_vector_expression_ok() {
-        let mut model = Model::default();
-        let t = TableInterface::<Integer>::add_table_1d(&mut model, String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![0, 1]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![0, 1]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table(
-            &mut model,
-            String::from("t3"),
-            FxHashMap::default(),
-            0,
-        );
-        assert!(t.is_ok());
-
-        let expression = expression::TableVectorExpression::Constant(vec![0, 1]);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table1D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DY(
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table(
-            0,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
-            ReduceOperator::Sum,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
                     Set::with_capacity(2),
                 ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_integer_table_vector_expression_err() {
-        let mut model = Model::default();
-        let t = TableInterface::<Integer>::add_table_1d(&mut model, String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![0, 1]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![0, 1]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Integer>::add_table(
-            &mut model,
-            String::from("t3"),
-            FxHashMap::default(),
-            0,
-        );
-        assert!(t.is_ok());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table1D(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table1D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2D(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DX(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DY(
-            1,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DY(
-            0,
-            ElementExpression::Variable(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DY(
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3D(
-            1,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table(
-            1,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table(
-            0,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
-            ReduceOperator::Sum,
-            1,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
-            ReduceOperator::Sum,
-            1,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Variable(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
-            ReduceOperator::Sum,
-            1,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(2),
-                ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
-            ReduceOperator::Sum,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Variable(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(2),
-                ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_continuous_table_vector_expression_ok() {
-        let mut model = Model::default();
-        let t = TableInterface::<Continuous>::add_table_1d(
-            &mut model,
-            String::from("t1"),
-            vec![0.0, 1.0],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![0.0, 1.0]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![0.0, 1.0]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table(
-            &mut model,
-            String::from("t3"),
-            FxHashMap::default(),
-            0.0,
-        );
-        assert!(t.is_ok());
-
-        let expression = expression::TableVectorExpression::Constant(vec![0, 1]);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table1D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DY(
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table(
-            0,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
-            ReduceOperator::Sum,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(2),
-                ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_continuous_table_vector_expression_err() {
-        let mut model = Model::default();
-        let t = TableInterface::<Continuous>::add_table_1d(
-            &mut model,
-            String::from("t1"),
-            vec![0.0, 1.0],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table_2d(
-            &mut model,
-            String::from("t2"),
-            vec![vec![0.0, 1.0]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table_3d(
-            &mut model,
-            String::from("t3"),
-            vec![vec![vec![0.0, 1.0]]],
-        );
-        assert!(t.is_ok());
-        let t = TableInterface::<Continuous>::add_table(
-            &mut model,
-            String::from("t3"),
-            FxHashMap::default(),
-            0.0,
-        );
-        assert!(t.is_ok());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table1D(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table1D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2D(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DX(
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DY(
-            1,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DY(
-            0,
-            ElementExpression::Variable(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DY(
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3D(
-            1,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3D(
-            0,
-            VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            VectorOrElementExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            )),
-            VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table(
-            1,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table(
-            0,
-            vec![
-                VectorOrElementExpression::Element(ElementExpression::Variable(0)),
-                VectorOrElementExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
-            ReduceOperator::Sum,
-            1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
-            ReduceOperator::Sum,
-            1,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
-            ReduceOperator::Sum,
-            1,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Variable(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                Set::with_capacity(2),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
-            ReduceOperator::Sum,
-            0,
-            ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
-            ReduceOperator::Sum,
-            1,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(2),
-                ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
-            ReduceOperator::Sum,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Variable(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(2),
-                ))),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-            ],
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -16972,51 +15802,60 @@ mod tests {
         assert!(rv.is_ok());
 
         let expression = ElementExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ElementExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ElementExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ElementExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ElementExpression::Last(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![0, 1]),
-        )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ElementExpression::At(
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            Box::new(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ElementExpression::Table(Box::new(TableExpression::Constant(0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ElementExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17024,59 +15863,55 @@ mod tests {
         let model = Model::default();
 
         let expression = ElementExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ElementExpression::Variable(0)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ElementExpression::Last(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ElementExpression::At(
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            Box::new(ElementExpression::Constant(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ElementExpression::At(
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            Box::new(ElementExpression::Variable(0)),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::Table(Box::new(TableExpression::Table1D(
             0,
             ElementExpression::Constant(0),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::If(
             Box::new(Condition::ComparisonE(
@@ -17087,32 +15922,48 @@ mod tests {
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ElementExpression::Variable(1)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ElementExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
     fn check_set_reduce_expression_constant_ok() {
         let model = Model::default();
         let expression = SetReduceExpression::Constant(Set::default());
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17127,8 +15978,12 @@ mod tests {
             table.id(),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17143,8 +15998,12 @@ mod tests {
             table.id() + 1,
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17159,8 +16018,12 @@ mod tests {
             table.id(),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17175,8 +16038,12 @@ mod tests {
             table.id(),
             Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17192,8 +16059,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17209,8 +16080,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17226,8 +16101,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17243,8 +16122,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17260,8 +16143,55 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
+    }
+
+    #[test]
+    fn check_integer_expression_minimum_spanning_tree_with_connectivity_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("weights", vec![vec![1, 2], vec![3, 4]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let connectivity_table =
+            model.add_table_2d("connectivity", vec![vec![true, true], vec![true, true]]);
+        assert!(connectivity_table.is_ok());
+        let connectivity_table = connectivity_table.unwrap();
+        let expression = IntegerExpression::MinimumSpanningTreeWithConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
+            ))),
+            table.id(),
+            connectivity_table.id(),
+        );
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+    }
+
+    #[test]
+    fn check_integer_expression_minimum_spanning_tree_with_connectivity_shape_mismatch_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("weights", vec![vec![1, 2], vec![3, 4]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let connectivity_table = model.add_table_2d("connectivity", vec![vec![true]]);
+        assert!(connectivity_table.is_ok());
+        let connectivity_table = connectivity_table.unwrap();
+        let expression = IntegerExpression::MinimumSpanningTreeWithConnectivity(
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(2),
+            ))),
+            table.id(),
+            connectivity_table.id(),
+        );
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
     }
 
     #[test]
@@ -17278,8 +16208,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17296,8 +16230,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17314,8 +16252,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17332,8 +16274,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17350,8 +16296,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17368,8 +16318,12 @@ mod tests {
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
             Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17389,8 +16343,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17410,8 +16368,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17431,8 +16393,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17452,8 +16418,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17473,8 +16443,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17494,8 +16468,12 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
             ],
         ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17507,29 +16485,52 @@ mod tests {
         let set = model.create_set(ob, &[]);
         assert!(set.is_ok());
         let set = set.unwrap();
-        let v = model.add_set_variable(String::from("v"), ob, set);
+        let v = model.add_set_variable(String::from("v"), ob, set.clone());
+        assert!(v.is_ok());
+        let v = model.add_set_resource_variable(String::from("v"), ob, false, set);
         assert!(v.is_ok());
 
         let expression =
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = SetExpression::Reference(ReferenceExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
+        let expression = SetExpression::Reference(ReferenceExpression::ResourceVariable(0));
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
         let expression = SetExpression::Reference(ReferenceExpression::Table(
             TableExpression::Constant(Set::with_capacity(2)),
         ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
@@ -17540,8 +16541,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
@@ -17550,17 +16555,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = SetExpression::FromVector(
-            2,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = SetExpression::If(
             Box::new(Condition::Constant(true)),
@@ -17571,8 +16571,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17580,20 +16584,42 @@ mod tests {
         let model = Model::default();
 
         let expression = SetExpression::Reference(ReferenceExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::Reference(ReferenceExpression::Table(
             TableExpression::Table1D(0, ElementExpression::Constant(0)),
         ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
+
+        let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
+            ReferenceExpression::ResourceVariable(0),
+        )));
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
@@ -17602,8 +16628,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
@@ -17612,8 +16642,12 @@ mod tests {
             ))),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
@@ -17622,25 +16656,24 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             ElementExpression::Constant(0),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = SetExpression::FromVector(
-            2,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::If(
             Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
@@ -17653,8 +16686,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::If(
             Box::new(Condition::Constant(true)),
@@ -17663,8 +16700,12 @@ mod tests {
                 Set::with_capacity(2),
             ))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = SetExpression::If(
             Box::new(Condition::Constant(true)),
@@ -17673,212 +16714,12 @@ mod tests {
             ))),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_vector_expression_ok() {
-        let mut model = Model::default();
-        let ob = model.add_object_type(String::from("something"), 2);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_vector_variable(String::from("v"), ob, vec![]);
-        assert!(v.is_ok());
-
-        let expression = VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Reference(ReferenceExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Reference(ReferenceExpression::Table(
-            TableExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Set(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::FromSet(Box::new(SetExpression::Reference(
-            ReferenceExpression::Constant(Set::with_capacity(2)),
-        )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = VectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_vector_expression_err() {
-        let model = Model::default();
-
-        let expression = VectorExpression::Reference(ReferenceExpression::Variable(0));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Reference(ReferenceExpression::Table(
-            TableExpression::Table1D(0, ElementExpression::Constant(0)),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Set(
-            ElementExpression::Variable(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Set(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Set(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Push(
-            ElementExpression::Variable(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::FromSet(Box::new(SetExpression::Reference(
-            ReferenceExpression::Variable(0),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::If(
-            Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = VectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -17890,84 +16731,97 @@ mod tests {
         assert!(rv.is_ok());
 
         let expression = IntegerExpression::Constant(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::Cost;
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::Table(Box::new(NumericTableExpression::Constant(0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = IntegerExpression::FromContinuous(
             CastOperator::Ceil,
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![0, 1])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -17978,62 +16832,88 @@ mod tests {
         };
 
         let expression = IntegerExpression::Cost;
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let model = Model::default();
 
         let expression = IntegerExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::Cost;
-        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
 
         let expression = IntegerExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(IntegerExpression::Variable(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::Table(Box::new(NumericTableExpression::Table1D(
             0,
             ElementExpression::Constant(0),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::If(
             Box::new(Condition::ComparisonI(
@@ -18044,71 +16924,47 @@ mod tests {
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(IntegerExpression::Variable(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = IntegerExpression::FromContinuous(
             CastOperator::Ceil,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::Last(Box::new(IntegerVectorExpression::Table(
-            Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            )),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -18119,7 +16975,9 @@ mod tests {
         };
 
         let expression = ContinuousExpression::Cost;
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let mut model = Model::default();
         let v = model.add_continuous_variable(String::from("v"), 0.0);
@@ -18128,107 +16986,130 @@ mod tests {
         assert!(rv.is_ok());
 
         let expression = ContinuousExpression::Constant(0.0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::Cost;
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::ContinuousUnaryOperation(
             ContinuousUnaryOperator::Sqrt,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::Round(
             CastOperator::Ceil,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::ContinuousBinaryOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             ContinuousExpression::Table(Box::new(NumericTableExpression::Constant(0.0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = ContinuousExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression =
             ContinuousExpression::FromInteger(Box::new(IntegerExpression::Constant(0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Constant(vec![
-                0.0, 1.0,
-            ])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -18236,87 +17117,127 @@ mod tests {
         let model = Model::default();
 
         let expression = ContinuousExpression::Variable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::ResourceVariable(0);
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::Cost;
-        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
 
         let expression = ContinuousExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::ContinuousUnaryOperation(
             ContinuousUnaryOperator::Sqrt,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::Round(
             CastOperator::Ceil,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Variable(0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::ContinuousBinaryOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousExpression::Variable(0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::ContinuousBinaryOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::Table(Box::new(NumericTableExpression::Table1D(
             0,
             ElementExpression::Constant(0),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::If(
             Box::new(Condition::ComparisonC(
@@ -18327,789 +17248,45 @@ mod tests {
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ContinuousExpression::Variable(0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = ContinuousExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression =
             ContinuousExpression::FromInteger(Box::new(IntegerExpression::Variable(0)));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Table(
-            Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            )),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_integer_vector_expression_ok() {
-        let model = Model::default();
-
-        let expression = IntegerVectorExpression::Constant(vec![0, 1]);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            IntegerVectorExpression::Reverse(Box::new(IntegerVectorExpression::Constant(vec![
-                0, 1,
-            ])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            IntegerVectorExpression::Pop(Box::new(IntegerVectorExpression::Constant(vec![0, 1])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::UnaryOperation(
-            UnaryOperator::Abs,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::Push(
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            IntegerExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::Set(
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            IntegerVectorExpression::Table(Box::new(TableVectorExpression::Constant(vec![0, 1])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = IntegerVectorExpression::FromContinuous(
-            CastOperator::Ceil,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_integer_vector_expression_err() {
-        let model = Model::default();
-
-        let expression = IntegerVectorExpression::Reverse(Box::new(
-            IntegerVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ))),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Pop(Box::new(IntegerVectorExpression::Table(
-            Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            )),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::UnaryOperation(
-            UnaryOperator::Abs,
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Push(
-            IntegerExpression::Variable(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Push(
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            IntegerExpression::Variable(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            IntegerExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            IntegerExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Set(
-            IntegerExpression::Variable(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Set(
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Set(
-            IntegerExpression::Constant(0),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::If(
-            Box::new(Condition::ComparisonI(
-                ComparisonOperator::Eq,
-                Box::new(IntegerExpression::Constant(0)),
-                Box::new(IntegerExpression::Variable(0)),
-            )),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerVectorExpression::FromContinuous(
-            CastOperator::Ceil,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-    }
-
-    #[test]
-    fn check_continuous_vector_expression_ok() {
-        let model = Model::default();
-
-        let expression = ContinuousVectorExpression::Constant(vec![0.0, 1.0]);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::Reverse(Box::new(
-            ContinuousVectorExpression::Constant(vec![0.0, 1.0]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            ContinuousVectorExpression::Pop(Box::new(ContinuousVectorExpression::Constant(vec![
-                0.0, 1.0,
-            ])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::UnaryOperation(
-            UnaryOperator::Abs,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::ContinuousUnaryOperation(
-            ContinuousUnaryOperator::Sqrt,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::Round(
-            CastOperator::Ceil,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::Push(
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ContinuousExpression::Constant(0.0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationX(
-            ContinuousBinaryOperator::Pow,
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationY(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ContinuousExpression::Constant(0.0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::Set(
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::ContinuousVectorOperation(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression =
-            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Constant(vec![
-                0.0, 1.0,
-            ])));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
-        let expression = ContinuousVectorExpression::FromInteger(Box::new(
-            IntegerVectorExpression::Constant(vec![0, 1]),
-        ));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-    }
-
-    #[test]
-    fn check_continuous_vector_expression_err() {
-        let model = Model::default();
-
-        let expression = ContinuousVectorExpression::Reverse(Box::new(
-            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ))),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Pop(Box::new(
-            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ))),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::UnaryOperation(
-            UnaryOperator::Abs,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousUnaryOperation(
-            ContinuousUnaryOperator::Sqrt,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Round(
-            CastOperator::Ceil,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Push(
-            ContinuousExpression::Variable(0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Push(
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            ContinuousExpression::Variable(0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::BinaryOperationX(
-            BinaryOperator::Add,
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ContinuousExpression::Constant(0.0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::BinaryOperationY(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ContinuousExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationX(
-            ContinuousBinaryOperator::Pow,
-            ContinuousExpression::Variable(0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationX(
-            ContinuousBinaryOperator::Pow,
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationY(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ContinuousExpression::Constant(0.0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousBinaryOperationY(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ContinuousExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Set(
-            ContinuousExpression::Variable(0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Set(
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::Set(
-            ContinuousExpression::Constant(0.0),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            ElementExpression::Variable(0),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::VectorOperation(
-            BinaryOperator::Add,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousVectorOperation(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::ContinuousVectorOperation(
-            ContinuousBinaryOperator::Pow,
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression =
-            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::If(
-            Box::new(Condition::ComparisonC(
-                ComparisonOperator::Eq,
-                Box::new(ContinuousExpression::Constant(0.0)),
-                Box::new(ContinuousExpression::Variable(0)),
-            )),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ),
-            ))),
-        );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ContinuousVectorExpression::FromInteger(Box::new(
-            IntegerVectorExpression::Table(Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ))),
-        ));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 
     #[test]
@@ -19117,92 +17294,148 @@ mod tests {
         let model = Model::default();
 
         let expression = Condition::Constant(true);
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Not(Box::new(Condition::Constant(true)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::And(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Or(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::ComparisonI(
             ComparisonOperator::Eq,
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::ComparisonC(
             ComparisonOperator::Eq,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::Constant(true)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::IsIn(
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::IsSubset(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEqual(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::IsNotEqual(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         ))));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
 
         let expression = Condition::Table(Box::new(TableExpression::Constant(true)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_ok());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_ok());
     }
 
     #[test]
@@ -19212,8 +17445,12 @@ mod tests {
         let expression = Condition::Not(Box::new(Condition::Table(Box::new(
             TableExpression::Table1D(0, ElementExpression::Constant(0)),
         ))));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::And(
             Box::new(Condition::Table(Box::new(TableExpression::Table1D(
@@ -19222,8 +17459,12 @@ mod tests {
             )))),
             Box::new(Condition::Constant(true)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::And(
             Box::new(Condition::Constant(true)),
@@ -19232,8 +17473,12 @@ mod tests {
                 ElementExpression::Constant(0),
             )))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Or(
             Box::new(Condition::Table(Box::new(TableExpression::Table1D(
@@ -19242,8 +17487,12 @@ mod tests {
             )))),
             Box::new(Condition::Constant(true)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Or(
             Box::new(Condition::Constant(true)),
@@ -19252,124 +17501,192 @@ mod tests {
                 ElementExpression::Constant(0),
             )))),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Variable(0)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonI(
             ComparisonOperator::Eq,
             Box::new(IntegerExpression::Variable(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonI(
             ComparisonOperator::Eq,
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonC(
             ComparisonOperator::Eq,
             Box::new(ContinuousExpression::Variable(0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::ComparisonC(
             ComparisonOperator::Eq,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsIn(
             ElementExpression::Variable(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsIn(
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsSubset(
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsSubset(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEqual(
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEqual(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEqual(
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsNotEqual(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         ))));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
 
         let expression = Condition::Table(Box::new(TableExpression::Table1D(
             0,
             ElementExpression::Constant(0),
         )));
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), false)
+            .is_err());
+        assert!(model
+            .check_expression(&expression, &mut FxHashSet::default(), true)
+            .is_err());
     }
 }

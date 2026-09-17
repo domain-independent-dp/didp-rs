@@ -7,8 +7,6 @@ use std::str;
 
 /// Set value.
 pub type Set = fixedbitset::FixedBitSet;
-/// Vector value.
-pub type Vector = Vec<usize>;
 /// Element value.
 pub type Element = usize;
 /// Integer numeric value.
@@ -21,6 +19,7 @@ pub type OrderedContinuous = ordered_float::OrderedFloat<Continuous>;
 /// Trait for string representation of variables, since the ToString trait for Set outputs binary
 /// bits, which is hard to read, ToVariableString overrides it with readable string representations.
 pub trait ToVariableString {
+    /// Returns a readable representation of the value in DyPDL syntax.
     fn to_variable_string(&self) -> String;
 }
 
@@ -82,7 +81,7 @@ pub trait ToNumeric {
 pub trait FromNumeric {
     /// Convert from an integer value.
     fn from_integer(n: Integer) -> Self;
-    /// Convert from a continuos value.
+    /// Convert from a continuous value.
     fn from_continuous(n: Continuous) -> Self;
     /// Convert from usize.
     fn from_usize(n: usize) -> Self;

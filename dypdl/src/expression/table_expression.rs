@@ -1,4 +1,5 @@
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::TableData;
@@ -30,36 +31,76 @@ impl<T: Clone> TableExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     pub fn eval<'a, U: StateInterface>(
         &'a self,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &'a TableRegistry,
         tables: &'a TableData<T>,
     ) -> &'a T {
         match self {
             Self::Constant(value) => value,
-            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(
+            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval_with_local_environment(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
             )),
             Self::Table2D(i, x, y) => tables.tables_2d[*i].get(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table3D(i, x, y, z) => tables.tables_3d[*i].get(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
-                z.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                z.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table(i, args) => {
                 let args: Vec<Element> = args
                     .iter()
-                    .map(|x| x.eval(state, function_cache, state_functions, registry))
+                    .map(|x| {
+                        x.eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                    })
                     .collect();
                 tables.tables[*i].get(&args)
             }
@@ -70,7 +111,7 @@ impl<T: Clone> TableExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry, tables: &TableData<T>) -> TableExpression<T> {
         match self {
             Self::Table1D(i, x) => match x.simplify(registry) {
@@ -158,14 +199,6 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("t1"), 0);
-        let vector_tables = TableData {
-            tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
-            name_to_table_1d,
-            ..Default::default()
-        };
-
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
@@ -182,7 +215,6 @@ mod tests {
         TableRegistry {
             element_tables,
             set_tables,
-            vector_tables,
             ..Default::default()
         }
     }
@@ -197,7 +229,6 @@ mod tests {
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
             },
@@ -214,12 +245,14 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
 
         let expression = TableExpression::Constant(1);
         assert_eq!(
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -234,11 +267,13 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(0));
         assert_eq!(
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -250,6 +285,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -264,6 +300,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table2D(
             0,
             ElementExpression::Constant(0),
@@ -273,6 +310,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -288,6 +326,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -302,6 +341,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table3D(
             0,
             ElementExpression::Constant(0),
@@ -312,6 +352,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -328,6 +369,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -342,6 +384,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = TableExpression::Table(
             0,
             vec![
@@ -355,6 +398,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -374,6 +418,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables
@@ -393,6 +438,7 @@ mod tests {
             *expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.element_tables

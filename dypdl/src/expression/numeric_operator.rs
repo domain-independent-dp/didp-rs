@@ -52,13 +52,13 @@ impl ContinuousUnaryOperator {
 /// Operator to convert a continuous value to an integer value.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CastOperator {
-    // Floor.
+    /// Rounds down to the nearest integer.
     Floor,
-    // Ceiling.
+    /// Rounds up to the nearest integer.
     Ceil,
-    // Rounding.
+    /// Rounds to the nearest integer, with halfway values rounded away from zero.
     Round,
-    // Truncate.
+    /// Discards the fractional part.
     Trunc,
 }
 
@@ -89,7 +89,7 @@ pub enum BinaryOperator {
     Sub,
     /// Multiplication.
     Mul,
-    // Division.
+    /// Division.
     Div,
     /// Remainder.
     Rem,
@@ -101,6 +101,7 @@ pub enum BinaryOperator {
 
 /// A trait for max/min binary operation.
 pub trait MaxMin<Rhs = Self> {
+    /// Expression returned by the operation.
     type Output;
     /// Returns an expression representing the maximum.
     fn max(self, rhs: Rhs) -> Self::Output;
@@ -187,6 +188,7 @@ pub enum ContinuousBinaryOperator {
 
 /// A trait for binary arithmetic operator specific to continuous values.
 pub trait ContinuousBinaryOperation<Rhs = Self> {
+    /// Expression returned by the operation.
     type Output;
     /// Returns an expression representing the power.
     fn pow(self, rhs: Rhs) -> Self::Output;

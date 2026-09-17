@@ -33,7 +33,7 @@ pub enum VariableValueUnion {
 /// >>> state[var] = 5
 /// >>> state[var]
 /// 5
-#[pyclass(name = "State")]
+#[pyclass(name = "State", from_py_object)]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StatePy(State);
 
@@ -69,6 +69,11 @@ impl StatePy {
             VarUnion::Set(var) => VariableValueUnion::Set(HashSet::from_iter(
                 self.0.get_set_variable(SetVariable::from(var).id()).ones(),
             )),
+            VarUnion::SetResource(var) => VariableValueUnion::Set(HashSet::from_iter(
+                self.0
+                    .get_set_resource_variable(SetResourceVariable::from(var).id())
+                    .ones(),
+            )),
             VarUnion::Int(var) => VariableValueUnion::Int(
                 self.0.get_integer_variable(IntegerVariable::from(var).id()),
             ),
@@ -101,6 +106,11 @@ impl StatePy {
                 let var = SetVariable::from(var);
                 let value = value.extract::<SetConstPy>()?.into();
                 self.0.signature_variables.set_variables[var.id()] = value;
+            }
+            VarUnion::SetResource(var) => {
+                let var = SetResourceVariable::from(var);
+                let value = value.extract::<SetConstPy>()?.into();
+                self.0.resource_variables.set_variables[var.id()] = value;
             }
             VarUnion::Int(var) => {
                 let var = IntegerVariable::from(var);

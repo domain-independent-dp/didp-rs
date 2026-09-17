@@ -3,10 +3,9 @@ use dypdl::variable_type::{Integer, Numeric};
 use dypdl_heuristic_search::Parameters;
 use std::fmt;
 use std::str;
+use yaml_rust::yaml::Hash;
 
-pub fn parse_from_map<T: Numeric>(
-    map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
-) -> Result<Parameters<T>, util::YamlContentErr>
+pub fn parse_from_map<T: Numeric>(map: &Hash) -> Result<Parameters<T>, util::YamlContentErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {

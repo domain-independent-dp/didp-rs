@@ -20,117 +20,105 @@ use yaml_rust::yaml::{Array, Hash};
 use crate::util;
 use dypdl::expression::{
     Condition, ContinuousExpression, ElementExpression, IntegerExpression, SetExpression,
-    VectorExpression,
 };
 use dypdl::variable_type::Element;
-use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction, StateFunctions};
+use dypdl::{
+    CostType, GroundedCondition, LocalVariableData, Model, ModelErr, ReduceFunction, StateFunctions,
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::error::Error;
 use yaml_rust::Yaml;
 
 /// Returns an integer expression loaded from YAML.
 ///
-/// `parameters` specify names and values of constants.
+/// `parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in `model`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn load_integer_expression_from_yaml(
     value: &Yaml,
-    model: &Model,
+    model: &mut Model,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<IntegerExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_integer_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
+    let mut model_data = expression_parser::ModelData {
+        metadata: &model.state_metadata,
+        functions: &model.state_functions,
+        registry: &model.table_registry,
         parameters,
-    )
+        local_variable_data: &mut model.local_variable_data,
+    };
+    parse_expression_from_yaml::parse_integer_from_yaml(value, &mut model_data)
 }
 
 /// Returns a continuous expression loaded from YAML.
 ///
-/// `parameters` specify names and values of constants.
+/// `parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in `model`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn load_continuous_expression_from_yaml(
     value: &Yaml,
-    model: &Model,
+    model: &mut Model,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<ContinuousExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_continuous_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
+    let mut model_data = expression_parser::ModelData {
+        metadata: &model.state_metadata,
+        functions: &model.state_functions,
+        registry: &model.table_registry,
         parameters,
-    )
+        local_variable_data: &mut model.local_variable_data,
+    };
+    parse_expression_from_yaml::parse_continuous_from_yaml(value, &mut model_data)
 }
 
 /// Returns an element expression loaded from YAML.
 ///
-/// `parameters` specify names and values of constants.
+/// `parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in `model`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn load_element_expression_from_yaml(
     value: &Yaml,
-    model: &Model,
+    model: &mut Model,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<ElementExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_element_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
+    let mut model_data = expression_parser::ModelData {
+        metadata: &model.state_metadata,
+        functions: &model.state_functions,
+        registry: &model.table_registry,
         parameters,
-    )
+        local_variable_data: &mut model.local_variable_data,
+    };
+    parse_expression_from_yaml::parse_element_from_yaml(value, &mut model_data)
 }
 
 /// Returns a set expression loaded from YAML.
 ///
-/// `parameters` specify names and values of constants.
+/// `parameters` specify names and values of constants. Any `reduce`/`filter`
+/// binder in the expression registers a fresh local variable in `model`.
 ///
 /// # Errors
 ///
 /// If the format is invalid.
 pub fn load_set_expression_from_yaml(
     value: &Yaml,
-    model: &Model,
+    model: &mut Model,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<SetExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_set_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
+    let mut model_data = expression_parser::ModelData {
+        metadata: &model.state_metadata,
+        functions: &model.state_functions,
+        registry: &model.table_registry,
         parameters,
-    )
-}
-
-/// Returns a vector expression loaded from YAML.
-///
-/// `parameters` specify names and values of constants.
-///
-/// # Errors
-///
-/// If the format is invalid.
-pub fn load_vector_expression_from_yaml(
-    value: &Yaml,
-    model: &Model,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<VectorExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_vector_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
-        parameters,
-    )
+        local_variable_data: &mut model.local_variable_data,
+    };
+    parse_expression_from_yaml::parse_set_from_yaml(value, &mut model_data)
 }
 
 /// Returns a DyPDL model loaded from YAML.
@@ -142,6 +130,10 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     let domain = util::get_map(domain)?;
     let problem = util::get_map(problem)?;
 
+    // Grown on the fly by `reduce`/`filter` binders as expressions are parsed
+    // below (see `expression_parser::util::bind_local_variable`).
+    let mut local_variable_data = LocalVariableData::default();
+
     let variables = util::get_yaml_by_key(domain, "state_variables")?;
     let state_metadata = match (
         domain.get(&Yaml::from_str("objects")),
@@ -152,7 +144,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         }
         (None, None) => {
             let objects = yaml_rust::Yaml::Array(Vec::new());
-            let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
+            let object_numbers = yaml_rust::Yaml::Hash(Hash::new());
             state_parser::load_metadata_from_yaml(&objects, variables, &object_numbers)?
         }
         (Some(_), None) => {
@@ -227,6 +219,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             value,
             &state_metadata,
             &table_registry,
+            &mut local_variable_data,
         )?,
         None => StateFunctions::default(),
     };
@@ -242,6 +235,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &parameters,
+                &mut local_variable_data,
             )?;
             let conditions = filter_constraints(conditions)?;
             constraints.extend(conditions);
@@ -257,6 +251,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &parameters,
+                &mut local_variable_data,
             )?;
             let conditions = filter_constraints(conditions)?;
             constraints.extend(conditions);
@@ -278,6 +273,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &cost_type,
+                &mut local_variable_data,
             )?;
             base_cases.push(base_case);
         }
@@ -290,6 +286,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &cost_type,
+                &mut local_variable_data,
             )?;
             base_cases.push(base_case);
         }
@@ -328,6 +325,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &cost_type,
+                &mut local_variable_data,
             )?;
 
             for t in &transition {
@@ -361,6 +359,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &state_functions,
                 &table_registry,
                 &cost_type,
+                &mut local_variable_data,
             )?;
             if forced {
                 if backward {
@@ -389,6 +388,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &table_registry,
                 &forward_transitions,
                 &backward_transitions,
+                &mut local_variable_data,
             )?,
         );
     }
@@ -401,6 +401,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &table_registry,
                 &forward_transitions,
                 &backward_transitions,
+                &mut local_variable_data,
             )?,
         );
     }
@@ -409,14 +410,18 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("dual_bounds")) {
         let parameters = FxHashMap::default();
         for bound in util::get_array(array)? {
+            let mut model_data = expression_parser::ModelData {
+                metadata: &state_metadata,
+                functions: &state_functions,
+                registry: &table_registry,
+                parameters: &parameters,
+                local_variable_data: &mut local_variable_data,
+            };
             match cost_type {
                 CostType::Integer => {
                     let expression = parse_expression_from_yaml::parse_integer_from_yaml(
                         bound,
-                        &state_metadata,
-                        &state_functions,
-                        &table_registry,
-                        &parameters,
+                        &mut model_data,
                     )?;
                     dual_bounds.push(dypdl::CostExpression::Integer(
                         expression.simplify(&table_registry),
@@ -425,10 +430,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 CostType::Continuous => {
                     let expression = parse_expression_from_yaml::parse_continuous_from_yaml(
                         bound,
-                        &state_metadata,
-                        &state_functions,
-                        &table_registry,
-                        &parameters,
+                        &mut model_data,
                     )?;
                     dual_bounds.push(dypdl::CostExpression::Continuous(
                         expression.simplify(&table_registry),
@@ -440,14 +442,18 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("dual_bounds")) {
         let parameters = FxHashMap::default();
         for bound in util::get_array(array)? {
+            let mut model_data = expression_parser::ModelData {
+                metadata: &state_metadata,
+                functions: &state_functions,
+                registry: &table_registry,
+                parameters: &parameters,
+                local_variable_data: &mut local_variable_data,
+            };
             match cost_type {
                 CostType::Integer => {
                     let expression = parse_expression_from_yaml::parse_integer_from_yaml(
                         bound,
-                        &state_metadata,
-                        &state_functions,
-                        &table_registry,
-                        &parameters,
+                        &mut model_data,
                     )?;
                     dual_bounds.push(dypdl::CostExpression::Integer(
                         expression.simplify(&table_registry),
@@ -456,10 +462,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 CostType::Continuous => {
                     let expression = parse_expression_from_yaml::parse_continuous_from_yaml(
                         bound,
-                        &state_metadata,
-                        &state_functions,
-                        &table_registry,
-                        &parameters,
+                        &mut model_data,
                     )?;
                     dual_bounds.push(dypdl::CostExpression::Continuous(
                         expression.simplify(&table_registry),
@@ -474,6 +477,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         target,
         table_registry,
         state_functions,
+        local_variable_data,
         state_constraints: constraints,
         base_cases,
         base_states,
@@ -518,10 +522,7 @@ fn filter_constraints(
     for condition in conditions {
         match condition.condition {
             Condition::Constant(true) => continue,
-            Condition::Constant(false)
-                if condition.elements_in_set_variable.is_empty()
-                    && condition.elements_in_vector_variable.is_empty() =>
-            {
+            Condition::Constant(false) if condition.elements_in_set_variable.is_empty() => {
                 return Err(ModelErr::new(String::from(
                     "model has a constraint never satisfied",
                 )))
@@ -546,25 +547,25 @@ mod tests {
 
     #[test]
     fn load_integer_expression_from_yaml_err() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("(+ cost 1"));
-        let result = load_integer_expression_from_yaml(&value, &model, &parameters);
+        let result = load_integer_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
 
         let value = Yaml::Real(String::from("1.2"));
-        let result = load_integer_expression_from_yaml(&value, &model, &parameters);
+        let result = load_integer_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn load_continuous_expression_from_yaml_ok() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("(+ cost 1)"));
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
@@ -576,61 +577,61 @@ mod tests {
         );
 
         let value = Yaml::Integer(1);
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ContinuousExpression::Constant(1.0));
 
         let value = Yaml::Real(String::from("1.2"));
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ContinuousExpression::Constant(1.2));
     }
 
     #[test]
     fn load_continuous_expression_from_yaml_err() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("(+ cost 1"));
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
 
         let value = Yaml::Real(String::from("a"));
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
 
         let value = Yaml::Boolean(true);
-        let result = load_continuous_expression_from_yaml(&value, &model, &parameters);
+        let result = load_continuous_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn load_element_expression_from_yaml_ok() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("1"));
-        let result = load_element_expression_from_yaml(&value, &model, &parameters);
+        let result = load_element_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ElementExpression::Constant(1));
 
         let value = Yaml::Integer(1);
-        let result = load_element_expression_from_yaml(&value, &model, &parameters);
+        let result = load_element_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ElementExpression::Constant(1));
     }
 
     #[test]
     fn load_element_expression_from_yaml_err() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("(+ cost 1"));
-        let result = load_element_expression_from_yaml(&value, &model, &parameters);
+        let result = load_element_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
 
         let value = Yaml::Real(String::from("1.2"));
-        let result = load_element_expression_from_yaml(&value, &model, &parameters);
+        let result = load_element_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
     }
 
@@ -639,14 +640,14 @@ mod tests {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 3);
         assert!(ob.is_ok());
-        let model = Model {
+        let mut model = Model {
             state_metadata: metadata,
             ..Default::default()
         };
         let parameters = FxHashMap::default();
 
         let value = Yaml::String(String::from("(something 0 1)"));
-        let result = load_set_expression_from_yaml(&value, &model, &parameters);
+        let result = load_set_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_ok());
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -659,47 +660,11 @@ mod tests {
 
     #[test]
     fn load_set_expression_from_yaml_err() {
-        let model = Model::default();
+        let mut model = Model::default();
         let parameters = FxHashMap::default();
 
         let value = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]);
-        let result = load_set_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn load_vector_expression_from_yaml_ok() {
-        let model = Model::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::String(String::from("(vector 0 1)"));
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
-        );
-
-        let value = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
-        );
-    }
-
-    #[test]
-    fn load_vector_expression_from_yaml_err() {
-        let model = Model::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::Integer(0);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_err());
-
-        let value = Yaml::Array(vec![Yaml::String(String::from("1")), Yaml::Integer(1)]);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
+        let result = load_set_expression_from_yaml(&value, &mut model, &parameters);
         assert!(result.is_err());
     }
 
@@ -818,6 +783,7 @@ dual_bounds:
         name_to_integer_variable.insert(String::from("v1"), 0);
         name_to_integer_variable.insert(String::from("v2"), 1);
         let expected = Model {
+            local_variable_data: LocalVariableData::default(),
             state_metadata: StateMetadata {
                 integer_variable_names: vec![String::from("v1"), String::from("v2")],
                 name_to_integer_variable,
@@ -988,6 +954,7 @@ base_states:
         let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("v"), 0);
         let expected = Model {
+            local_variable_data: LocalVariableData::default(),
             state_metadata: StateMetadata {
                 integer_variable_names: vec![String::from("v")],
                 name_to_integer_variable,
@@ -1074,7 +1041,6 @@ base_states:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -1170,6 +1136,7 @@ table_values:
         let mut bool_name_to_table_2d = FxHashMap::default();
         bool_name_to_table_2d.insert(String::from("connected"), 0);
         let expected = Model {
+            local_variable_data: LocalVariableData::default(),
             state_metadata: StateMetadata {
                 object_type_names: vec![String::from("cities")],
                 name_to_object_type: name_to_object,
@@ -1607,10 +1574,83 @@ target:
     }
 
     #[test]
+    fn model_load_from_yaml_with_reduce_filter_ok() {
+        let domain = r"
+objects: [node]
+state_variables: []
+tables:
+        - name: weight
+          type: integer
+          args: [node]
+base_cases:
+        - [(= 0 0)]
+transitions:
+        - name: noop
+          cost: (+ cost 0)
+          effect: {}
+dual_bounds:
+        - (reduce sum x (node 0 1 2) (weight x))
+        - (reduce sum x (filter y (node 0 1 2) (>= y 1)) (weight x))
+        - (+ 0 (* 1 |(filter x (node 0 1 2) (>= x 1))|))
+";
+        let problem = r"
+object_numbers: { node: 3 }
+target: {}
+table_values:
+        weight: {0: 10, 1: 20, 2: 30}
+";
+
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+        assert_eq!(model.dual_bounds.len(), 3);
+
+        let mut function_cache = dypdl::StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.dual_bounds[0].eval::<Integer, _>(
+                &model.target,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ),
+            60, // 10 + 20 + 30
+        );
+        assert_eq!(
+            model.dual_bounds[1].eval::<Integer, _>(
+                &model.target,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ),
+            50, // 20 + 30, node 0 filtered out
+        );
+        assert_eq!(
+            model.dual_bounds[2].eval::<Integer, _>(
+                &model.target,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ),
+            2, // |{1, 2}|
+        );
+    }
+
+    #[test]
     fn model_load_from_yaml_with_dictionary_ok() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -1712,6 +1752,7 @@ dictionary_values:
         bool_table.insert(vec![2, 2], false);
 
         let expected = Model {
+            local_variable_data: LocalVariableData::default(),
             state_metadata: StateMetadata {
                 object_type_names: vec![String::from("cities")],
                 name_to_object_type: name_to_object,
@@ -2121,7 +2162,6 @@ table_values:
         let problem = &problem[0];
 
         let domain = r"
-reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -2172,7 +2212,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 state_variables:
         - name: unvisited
           type: set
@@ -2222,7 +2261,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [null]
 tables:
         - name: ready_time
@@ -2263,7 +2301,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2339,7 +2376,6 @@ constraints:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2563,7 +2599,6 @@ table_values:
     fn model_load_from_yaml_with_dictionary_err() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2639,7 +2674,6 @@ table_values:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited

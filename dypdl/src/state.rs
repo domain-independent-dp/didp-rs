@@ -2,7 +2,7 @@ use crate::effect;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
 use crate::util::{self, ModelErr};
-use crate::variable_type::{Continuous, Element, Integer, Set, Vector};
+use crate::variable_type::{Continuous, Element, Integer, Set};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -19,16 +19,6 @@ pub trait StateInterface: Sized {
     ///
     /// Panics if no variable has the id of `i`.
     fn get_set_variable(&self, i: usize) -> &Set;
-
-    /// Returns the number of vector variables;
-    fn get_number_of_vector_variables(&self) -> usize;
-
-    /// Returns the value of a vector variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no variable has the id of `i`.
-    fn get_vector_variable(&self, i: usize) -> &Vector;
 
     /// Returns the number of element variables;
     fn get_number_of_element_variables(&self) -> usize;
@@ -59,6 +49,16 @@ pub trait StateInterface: Sized {
     ///
     /// Panics if no variable has the id of `i`.
     fn get_continuous_variable(&self, i: usize) -> Continuous;
+
+    /// Returns the number of set resource variables;
+    fn get_number_of_set_resource_variables(&self) -> usize;
+
+    /// Returns the value of a set resource variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    fn get_set_resource_variable(&self, i: usize) -> &Set;
 
     /// Returns the number of element resource variables;
     fn get_number_of_element_resource_variables(&self) -> usize;
@@ -92,11 +92,11 @@ pub trait StateInterface: Sized {
 
     /// Returns the transitioned state by the effect.
     ///
-    /// Set and vector effects must be sorted by the indices of the variables.
+    /// Set effects must be sorted by the indices of the variables.
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     fn apply_effect<T: From<State>>(
         &self,
         effect: &effect::Effect,
@@ -120,22 +120,6 @@ pub trait StateInterface: Sized {
             i += 1;
         }
 
-        let len = self.get_number_of_vector_variables();
-        let mut vector_variables = Vec::with_capacity(len);
-        let mut i = 0;
-        for e in &effect.vector_effects {
-            while i < e.0 {
-                vector_variables.push(self.get_vector_variable(i).clone());
-                i += 1;
-            }
-            vector_variables.push(e.1.eval(self, function_cache, state_functions, registry));
-            i += 1;
-        }
-        while i < len {
-            vector_variables.push(self.get_vector_variable(i).clone());
-            i += 1;
-        }
-
         let mut element_variables: Vec<usize> = (0..self.get_number_of_element_variables())
             .map(|i| self.get_element_variable(i))
             .collect();
@@ -156,6 +140,22 @@ pub trait StateInterface: Sized {
             .collect();
         for e in &effect.continuous_effects {
             continuous_variables[e.0] = e.1.eval(self, function_cache, state_functions, registry);
+        }
+
+        let len = self.get_number_of_set_resource_variables();
+        let mut set_resource_variables = Vec::with_capacity(len);
+        let mut i = 0;
+        for e in &effect.set_resource_effects {
+            while i < e.0 {
+                set_resource_variables.push(self.get_set_resource_variable(i).clone());
+                i += 1;
+            }
+            set_resource_variables.push(e.1.eval(self, function_cache, state_functions, registry));
+            i += 1;
+        }
+        while i < len {
+            set_resource_variables.push(self.get_set_resource_variable(i).clone());
+            i += 1;
         }
 
         let mut element_resource_variables: Vec<usize> = (0..self
@@ -188,12 +188,12 @@ pub trait StateInterface: Sized {
         T::from(State {
             signature_variables: SignatureVariables {
                 set_variables,
-                vector_variables,
                 element_variables,
                 integer_variables,
                 continuous_variables,
             },
             resource_variables: ResourceVariables {
+                set_variables: set_resource_variables,
                 element_variables: element_resource_variables,
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
@@ -207,8 +207,6 @@ pub trait StateInterface: Sized {
 pub struct SignatureVariables {
     /// Set variables.
     pub set_variables: Vec<Set>,
-    /// Vector variables.
-    pub vector_variables: Vec<Vector>,
     /// Element variables.
     pub element_variables: Vec<Element>,
     /// Integer numeric variables.
@@ -220,6 +218,8 @@ pub struct SignatureVariables {
 /// Resource variables.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ResourceVariables {
+    /// Set variables.
+    pub set_variables: Vec<Set>,
     /// Element variables.
     pub element_variables: Vec<Element>,
     /// Integer numeric variables.
@@ -282,48 +282,7 @@ impl StateInterface for State {
         &self.signature_variables.set_variables[i]
     }
 
-    /// Returns the number of vector variables;
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    /// let state = model.target.clone();
-    ///
-    /// assert_eq!(state.get_number_of_vector_variables(), 1);
-    /// ```
-    #[inline]
-    fn get_number_of_vector_variables(&self) -> usize {
-        self.signature_variables.vector_variables.len()
-    }
-
-    /// Returns the value of a vector variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no variable has the id of `i`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// let variable = model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    /// let state = model.target.clone();
-    ///
-    /// assert_eq!(state.get_vector_variable(variable.id()), &vec![0, 1, 2, 3]);
-    #[inline]
-    fn get_vector_variable(&self, i: usize) -> &Vector {
-        &self.signature_variables.vector_variables[i]
-    }
-
-    /// Returns the number of vector variables;
+    /// Returns the number of element variables;
     ///
     /// # Examples
     ///
@@ -444,6 +403,51 @@ impl StateInterface for State {
     #[inline]
     fn get_continuous_variable(&self, i: usize) -> Continuous {
         self.signature_variables.continuous_variables[i]
+    }
+
+    /// Returns the number of set resource variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_resource_variable("variable", object_type, false, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_set_resource_variables(), 1);
+    ///
+    /// ```
+    #[inline]
+    fn get_number_of_set_resource_variables(&self) -> usize {
+        self.resource_variables.set_variables.len()
+    }
+
+    /// Returns the value of a set resource variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, false, set.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_set_resource_variable(variable.id()), &set);
+    /// ```
+    #[inline]
+    fn get_set_resource_variable(&self, i: usize) -> &Set {
+        &self.resource_variables.set_variables[i]
     }
 
     /// Returns the number of element resource variables;
@@ -618,8 +622,8 @@ impl State {
                 return false;
             }
         }
-        for i in 0..metadata.number_of_vector_variables() {
-            if self.get_vector_variable(i) != state.get_vector_variable(i) {
+        for i in 0..metadata.number_of_set_resource_variables() {
+            if self.get_set_resource_variable(i) != state.get_set_resource_variable(i) {
                 return false;
             }
         }
@@ -647,7 +651,7 @@ define_handle!(ObjectType);
 define_handle!(ElementVariable);
 define_handle!(ElementResourceVariable);
 define_handle!(SetVariable);
-define_handle!(VectorVariable);
+define_handle!(SetResourceVariable);
 define_handle!(IntegerVariable);
 define_handle!(IntegerResourceVariable);
 define_handle!(ContinuousVariable);
@@ -670,13 +674,6 @@ pub struct StateMetadata {
     /// Map from a set variable id to its object type id.
     pub set_variable_to_object: Vec<usize>,
 
-    /// Map from a vector variable id to the name.
-    pub vector_variable_names: Vec<String>,
-    /// Map from a name to a set variable id.
-    pub name_to_vector_variable: FxHashMap<String, usize>,
-    /// Map from a vector variable id to its object type id.
-    pub vector_variable_to_object: Vec<usize>,
-
     /// Map from an element variable id to the name.
     pub element_variable_names: Vec<String>,
     /// Map from a name to an element variable id.
@@ -693,6 +690,15 @@ pub struct StateMetadata {
     pub continuous_variable_names: Vec<String>,
     /// Map from a name to a continuous variable id.
     pub name_to_continuous_variable: FxHashMap<String, usize>,
+
+    /// Map from a set resource variable id to the name.
+    pub set_resource_variable_names: Vec<String>,
+    /// Map from a name to a set resource variable id.
+    pub name_to_set_resource_variable: FxHashMap<String, usize>,
+    /// Map from a set resource variable id to its object type id.
+    pub set_resource_variable_to_object: Vec<usize>,
+    /// Map from a set resource variable id to its preference.
+    pub set_less_is_better: Vec<bool>,
 
     /// Map from an element resource variable id to the name.
     pub element_resource_variable_names: Vec<String>,
@@ -755,24 +761,6 @@ impl StateMetadata {
         self.set_variable_names.len()
     }
 
-    /// Returns the number of vector variables.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    ///
-    /// assert_eq!(model.state_metadata.number_of_vector_variables(), 1);
-    /// ```
-    #[inline]
-    pub fn number_of_vector_variables(&self) -> usize {
-        self.vector_variable_names.len()
-    }
-
     /// Returns the number of element variables.
     ///
     /// # Examples
@@ -823,6 +811,25 @@ impl StateMetadata {
     #[inline]
     pub fn number_of_continuous_variables(&self) -> usize {
         self.continuous_variable_names.len()
+    }
+
+    /// Returns the number of set resource variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_resource_variable("variable", object_type, false, set).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_set_resource_variables(), 1);
+    /// ```
+    #[inline]
+    pub fn number_of_set_resource_variables(&self) -> usize {
+        self.set_resource_variable_names.len()
     }
 
     /// Returns the number of element resource variables.
@@ -877,7 +884,8 @@ impl StateMetadata {
 
     /// Returns true if there is a resource variable and false otherwise.
     pub fn has_resource_variables(&self) -> bool {
-        self.number_of_element_resource_variables() > 0
+        self.number_of_set_resource_variables() > 0
+            || self.number_of_element_resource_variables() > 0
             || self.number_of_integer_resource_variables() > 0
             || self.number_of_continuous_resource_variables() > 0
     }
@@ -891,9 +899,6 @@ impl StateMetadata {
         for name in &self.set_variable_names {
             name_set.insert(name.clone());
         }
-        for name in &self.vector_variable_names {
-            name_set.insert(name.clone());
-        }
         for name in &self.element_variable_names {
             name_set.insert(name.clone());
         }
@@ -901,6 +906,9 @@ impl StateMetadata {
             name_set.insert(name.clone());
         }
         for name in &self.continuous_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.set_resource_variable_names {
             name_set.insert(name.clone());
         }
         for name in &self.element_resource_variable_names {
@@ -963,7 +971,80 @@ impl StateMetadata {
         status?;
         let x = |i| a.get_continuous_resource_variable(i);
         let y = |i| b.get_continuous_resource_variable(i);
-        Self::compare_resource_variables(&x, &y, &self.continuous_less_is_better, status)
+        let status =
+            Self::compare_resource_variables(&x, &y, &self.continuous_less_is_better, status);
+        status?;
+        let x = |i| a.get_set_resource_variable(i);
+        let y = |i| b.get_set_resource_variable(i);
+        Self::compare_set_resource_variables(&x, &y, &self.set_less_is_better, status)
+    }
+
+    fn compare_set_resource_variables<'a, F, G>(
+        x: &'a F,
+        y: &'a G,
+        less_is_better: &'a [bool],
+        mut status: Option<Ordering>,
+    ) -> Option<Ordering>
+    where
+        F: Fn(usize) -> &'a Set,
+        G: Fn(usize) -> &'a Set,
+    {
+        for (i, less_is_better) in less_is_better.iter().enumerate() {
+            let v1 = x(i);
+            let v2 = y(i);
+
+            if v1 == v2 {
+                continue;
+            }
+
+            match status {
+                Some(Ordering::Equal) => {
+                    if v1.is_subset(v2) {
+                        if *less_is_better {
+                            status = Some(Ordering::Greater);
+                        } else {
+                            status = Some(Ordering::Less);
+                        }
+                    } else if v2.is_subset(v1) {
+                        if *less_is_better {
+                            status = Some(Ordering::Less);
+                        } else {
+                            status = Some(Ordering::Greater);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                Some(Ordering::Less) => {
+                    if v1.is_subset(v2) {
+                        if *less_is_better {
+                            return None;
+                        }
+                    } else if v2.is_subset(v1) {
+                        if !*less_is_better {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                Some(Ordering::Greater) => {
+                    if v2.is_subset(v1) {
+                        if *less_is_better {
+                            return None;
+                        }
+                    } else if v1.is_subset(v2) {
+                        if !*less_is_better {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                None => {}
+            }
+        }
+        status
     }
 
     fn compare_resource_variables<T: PartialOrd, F, G>(
@@ -1034,7 +1115,7 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_element_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{i} th element variable does not exists",
+                    "{i} th element variable does not exist",
                 )));
             }
             let v = v.unwrap();
@@ -1065,32 +1146,31 @@ impl StateMetadata {
         for i in 0..n {
             let v = panic::catch_unwind(|| state.get_set_variable(i));
             if v.is_err() {
-                return Err(ModelErr::new(format!(
-                    "{i} th set variable does not exists",
-                )));
+                return Err(ModelErr::new(format!("{i} th set variable does not exist")));
             }
             let v = v.unwrap();
             let m = self.object_numbers[self.set_variable_to_object[i]];
             if v.len() > m {
+                let len = v.len();
                 return Err(ModelErr::new(format!(
-                    "set size {} for {i} th set variable > #objects ({m})",
-                    v.len(),
+                    "set size {len} for {i} th set variable > #objects ({m})",
                 )));
             }
         }
-        let n = self.number_of_vector_variables();
+        let n = self.number_of_set_resource_variables();
         for i in 0..n {
-            let v = panic::catch_unwind(|| state.get_vector_variable(i));
+            let v = panic::catch_unwind(|| state.get_set_resource_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{i} th vector variable does not exists",
+                    "{i} th set resource variable does not exist",
                 )));
             }
             let v = v.unwrap();
-            let m = self.object_numbers[self.vector_variable_to_object[i]];
-            if v.iter().any(|v| *v >= m) {
+            let m = self.object_numbers[self.set_resource_variable_to_object[i]];
+            if v.len() > m {
+                let len = v.len();
                 return Err(ModelErr::new(format!(
-                    "vector for {i} th vector variable contains a value >= #objects ({m})",
+                    "set size {len} for {i} th set resource variable > #objects ({m})",
                 )));
             }
         }
@@ -1321,40 +1401,42 @@ impl StateMetadata {
         Ok(SetVariable(id))
     }
 
-    /// Returns a vector variable given a name.
+    /// Returns a set resource variable given a name.
     ///
     /// # Errors
     ///
     /// If no such variable.
     #[inline]
-    pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
-        let id = util::get_id(name, &self.name_to_vector_variable)?;
-        Ok(VectorVariable(id))
+    pub fn get_set_resource_variable(&self, name: &str) -> Result<SetResourceVariable, ModelErr> {
+        let id = util::get_id(name, &self.name_to_set_resource_variable)?;
+        Ok(SetResourceVariable(id))
     }
 
-    /// Adds and returns a vector variable.
+    /// Adds and returns a set resource variable.
     ///
     /// The value in the target state must be specified.
     ///
     /// # Errors
     ///
     /// If the name is already used or the object type is not in the model.
-    pub fn add_vector_variable<T>(
+    pub fn add_set_resource_variable<T>(
         &mut self,
         name: T,
         ob: ObjectType,
-    ) -> Result<VectorVariable, ModelErr>
+        less_is_better: bool,
+    ) -> Result<SetResourceVariable, ModelErr>
     where
         String: From<T>,
     {
         self.check_object(ob)?;
         let id = util::add_name(
             name,
-            &mut self.vector_variable_names,
-            &mut self.name_to_vector_variable,
+            &mut self.set_resource_variable_names,
+            &mut self.name_to_set_resource_variable,
         )?;
-        self.vector_variable_to_object.push(ob.id());
-        Ok(VectorVariable(id))
+        self.set_resource_variable_to_object.push(ob.id());
+        self.set_less_is_better.push(less_is_better);
+        Ok(SetResourceVariable(id))
     }
 
     /// Returns an integer variable given a name.
@@ -1536,7 +1618,7 @@ macro_rules! impl_check_variable {
 impl_check_variable!(ElementVariable, element_variable_names);
 impl_check_variable!(ElementResourceVariable, element_resource_variable_names);
 impl_check_variable!(SetVariable, set_variable_names);
-impl_check_variable!(VectorVariable, vector_variable_names);
+impl_check_variable!(SetResourceVariable, set_resource_variable_names);
 impl_check_variable!(IntegerVariable, integer_variable_names);
 impl_check_variable!(IntegerResourceVariable, integer_resource_variable_names);
 impl_check_variable!(ContinuousVariable, continuous_variable_names);
@@ -1581,7 +1663,7 @@ macro_rules! impl_get_object_type_of {
 impl_get_object_type_of!(ElementVariable, element_variable_to_object);
 impl_get_object_type_of!(ElementResourceVariable, element_resource_variable_to_object);
 impl_get_object_type_of!(SetVariable, set_variable_to_object);
-impl_get_object_type_of!(VectorVariable, vector_variable_to_object);
+impl_get_object_type_of!(SetResourceVariable, set_resource_variable_to_object);
 
 /// Trait for accessing preference of resource variables.
 ///
@@ -1630,6 +1712,7 @@ macro_rules! impl_access_preference {
 }
 
 impl_access_preference!(ElementResourceVariable, element_less_is_better);
+impl_access_preference!(SetResourceVariable, set_less_is_better);
 impl_access_preference!(IntegerResourceVariable, integer_less_is_better);
 impl_access_preference!(ContinuousResourceVariable, continuous_less_is_better);
 
@@ -1657,19 +1740,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s2"), 2);
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 1];
-
-        let vector_variable_names = vec![
-            String::from("p0"),
-            String::from("p1"),
-            String::from("p2"),
-            String::from("p3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("p0"), 0);
-        name_to_vector_variable.insert(String::from("p1"), 1);
-        name_to_vector_variable.insert(String::from("p2"), 2);
-        name_to_vector_variable.insert(String::from("p3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 1];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -1707,6 +1777,19 @@ mod tests {
         name_to_continuous_variable.insert(String::from("c1"), 1);
         name_to_continuous_variable.insert(String::from("c2"), 2);
         name_to_continuous_variable.insert(String::from("c3"), 3);
+
+        let set_resource_variable_names = vec![
+            String::from("sr0"),
+            String::from("sr1"),
+            String::from("sr2"),
+            String::from("sr3"),
+        ];
+        let mut name_to_set_resource_variable = FxHashMap::default();
+        name_to_set_resource_variable.insert(String::from("s0"), 0);
+        name_to_set_resource_variable.insert(String::from("s1"), 1);
+        name_to_set_resource_variable.insert(String::from("s2"), 2);
+        name_to_set_resource_variable.insert(String::from("s3"), 3);
+        let set_resource_variable_to_object = vec![0, 0, 0, 1];
 
         let element_resource_variable_names = vec![
             String::from("er0"),
@@ -1752,9 +1835,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -1762,6 +1842,10 @@ mod tests {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            set_resource_variable_names,
+            name_to_set_resource_variable,
+            set_resource_variable_to_object,
+            set_less_is_better: vec![false, false, true, false],
             element_resource_variable_names,
             name_to_element_resource_variable,
             element_resource_variable_to_object,
@@ -1813,44 +1897,6 @@ mod tests {
             ..Default::default()
         };
         state.get_set_variable(1);
-    }
-
-    #[test]
-    fn state_get_number_of_vector_variables() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(state.get_number_of_vector_variables(), 1);
-    }
-
-    #[test]
-    fn state_get_vector_variable() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default(), vec![1]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(state.get_vector_variable(0), &Vector::default());
-        assert_eq!(state.get_vector_variable(1), &vec![1]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn state_get_vector_variable_panic() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        state.get_vector_variable(1);
     }
 
     #[test]
@@ -1965,6 +2011,46 @@ mod tests {
             ..Default::default()
         };
         state.get_continuous_variable(1);
+    }
+
+    #[test]
+    fn state_get_number_of_set_resource_variables() {
+        let state = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::default()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(state.get_number_of_set_resource_variables(), 1);
+    }
+
+    #[test]
+    fn state_get_set_resource_variable() {
+        let mut set = Set::with_capacity(2);
+        set.insert(1);
+        let state = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(2), set.clone()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(state.get_set_resource_variable(0), &Set::with_capacity(2));
+        assert_eq!(state.get_set_resource_variable(1), &set);
+    }
+
+    #[test]
+    #[should_panic]
+    fn state_get_set_resource_variable_panic() {
+        let state = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::default()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        state.get_set_resource_variable(1);
     }
 
     #[test]
@@ -2094,13 +2180,13 @@ mod tests {
         set2.insert(1);
         let state = State {
             signature_variables: SignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2], vec![1, 2]],
+                set_variables: vec![set1.clone(), set2],
                 element_variables: vec![1, 2],
                 integer_variables: vec![1, 2, 3],
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![set1],
                 element_variables: vec![],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
@@ -2116,18 +2202,6 @@ mod tests {
             SetElementOperator::Remove,
             ElementExpression::Constant(0),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-        );
-        let vector_effect1 = VectorExpression::Push(
-            ElementExpression::Constant(1),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let vector_effect2 = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
         );
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
@@ -2151,6 +2225,13 @@ mod tests {
             Box::new(ContinuousExpression::Variable(1)),
             Box::new(ContinuousExpression::Constant(2.0)),
         );
+        let set_resource_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
+        );
         let integer_resource_effect1 = IntegerExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(IntegerExpression::ResourceVariable(0)),
@@ -2173,10 +2254,10 @@ mod tests {
         );
         let effect = effect::Effect {
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            set_resource_effects: vec![(0, set_resource_effect1)],
             element_resource_effects: vec![],
             integer_resource_effects: vec![
                 (0, integer_resource_effect1),
@@ -2194,15 +2275,17 @@ mod tests {
         set1.insert(2);
         let mut set2 = Set::with_capacity(3);
         set2.insert(1);
+        let mut set_resource1 = Set::with_capacity(3);
+        set_resource1.insert(2);
         let expected = State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
                 continuous_variables: vec![0.0, 4.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![set_resource1],
                 element_variables: vec![],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],
@@ -2262,12 +2345,6 @@ mod tests {
     }
 
     #[test]
-    fn number_of_vector_variables() {
-        let metadata = generate_metadata();
-        assert_eq!(metadata.number_of_vector_variables(), 4);
-    }
-
-    #[test]
     fn number_of_element_variables() {
         let metadata = generate_metadata();
         assert_eq!(metadata.number_of_element_variables(), 4);
@@ -2283,6 +2360,12 @@ mod tests {
     fn number_of_continuous_variables() {
         let metadata = generate_metadata();
         assert_eq!(metadata.number_of_continuous_variables(), 4);
+    }
+
+    #[test]
+    fn number_of_set_resource_variables() {
+        let metadata = generate_metadata();
+        assert_eq!(metadata.number_of_set_resource_variables(), 4);
     }
 
     #[test]
@@ -2306,11 +2389,15 @@ mod tests {
             continuous_variable_names: vec![String::from("v")],
             set_variable_names: vec![String::from("v")],
             set_variable_to_object: vec![0],
-            vector_variable_names: vec![String::from("v")],
-            vector_variable_to_object: vec![0],
             ..Default::default()
         };
         assert!(!metadata.has_resource_variables());
+        let metadata = StateMetadata {
+            set_resource_variable_names: vec![String::from("v")],
+            set_less_is_better: vec![true],
+            ..Default::default()
+        };
+        assert!(metadata.has_resource_variables());
         let metadata = StateMetadata {
             element_resource_variable_names: vec![String::from("v")],
             element_resource_variable_to_object: vec![0],
@@ -2342,14 +2429,14 @@ mod tests {
         expected.insert(String::from("s1"));
         expected.insert(String::from("s2"));
         expected.insert(String::from("s3"));
-        expected.insert(String::from("p0"));
-        expected.insert(String::from("p1"));
-        expected.insert(String::from("p2"));
-        expected.insert(String::from("p3"));
         expected.insert(String::from("e0"));
         expected.insert(String::from("e1"));
         expected.insert(String::from("e2"));
         expected.insert(String::from("e3"));
+        expected.insert(String::from("sr0"));
+        expected.insert(String::from("sr1"));
+        expected.insert(String::from("sr2"));
+        expected.insert(String::from("sr3"));
         expected.insert(String::from("er0"));
         expected.insert(String::from("er1"));
         expected.insert(String::from("er2"));
@@ -2374,156 +2461,349 @@ mod tests {
     }
 
     #[test]
-    fn dominance() {
-        let metadata = generate_metadata();
+    fn dominance_equal() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
 
         let a = State {
             resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
-            },
-            ..Default::default()
-        };
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Equal));
-
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 0, 3, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
-        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
-
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 1, 3, 0],
-                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
-        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
-
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 3, 3, 0],
-                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert!(metadata.dominance(&b, &a).is_none());
-
-        let a = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
-            },
-            ..Default::default()
-        };
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
-        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
-
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1, 2, 0],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
-            },
-            ..Default::default()
-        };
-        assert!(metadata.dominance(&a, &b).is_none());
-    }
-
-    #[test]
-    #[should_panic]
-    fn dominance_element_length_panic() {
-        let metadata = generate_metadata();
-        let a = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![1, 2, 3],
-                integer_variables: vec![1, 2, 2, 2],
-                continuous_variables: vec![],
-            },
-            ..Default::default()
-        };
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![1, 2, 3, 0],
-                integer_variables: vec![1, 2, 2, 2],
-                continuous_variables: vec![],
-            },
-            ..Default::default()
-        };
-        metadata.dominance(&b, &a);
-    }
-
-    #[test]
-    #[should_panic]
-    fn dominance_integer_length_panic() {
-        let metadata = generate_metadata();
-        let a = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![],
+                set_variables: vec![
+                    Set::with_capacity(4),
+                    Set::with_capacity(4),
+                    Set::with_capacity(4),
+                ],
+                element_variables: vec![0, 1, 2],
                 integer_variables: vec![1, 2, 2],
-                continuous_variables: vec![],
+                continuous_variables: vec![0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
-        let b = State {
-            resource_variables: ResourceVariables {
-                element_variables: vec![],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![],
-            },
-            ..Default::default()
-        };
-        metadata.dominance(&b, &a);
+        assert_eq!(metadata.dominance(&a, &a), Some(Ordering::Equal));
     }
 
     #[test]
-    #[should_panic]
-    fn dominance_continuous_length_panic() {
-        let metadata = generate_metadata();
+    fn has_dominance() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
+
+        let mut set_a3 = Set::with_capacity(4);
+        set_a3.insert(0);
+        set_a3.insert(1);
         let a = State {
             resource_variables: ResourceVariables {
-                element_variables: vec![],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
+                set_variables: vec![Set::with_capacity(4), Set::with_capacity(4), set_a3],
+                element_variables: vec![0, 1, 2],
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
+        let mut set_b1 = Set::with_capacity(4);
+        set_b1.insert(0);
+        let mut set_b3 = Set::with_capacity(4);
+        set_b3.insert(0);
         let b = State {
             resource_variables: ResourceVariables {
-                element_variables: vec![],
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 1.0, 3.0],
+                set_variables: vec![set_b1, Set::with_capacity(4), set_b3],
+                element_variables: vec![1, 2, 2],
+                integer_variables: vec![1, 3, 1],
+                continuous_variables: vec![0.5, 0.0, -2.0],
             },
             ..Default::default()
         };
-        metadata.dominance(&b, &a);
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Less));
+        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Greater));
+    }
+
+    #[test]
+    fn none_dominance_by_set() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
+
+        let mut set_a3 = Set::with_capacity(4);
+        set_a3.insert(1);
+        let a = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(4), Set::with_capacity(4), set_a3],
+                element_variables: vec![0, 1, 2],
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![0.0, 0.0, 0.0],
+            },
+            ..Default::default()
+        };
+        let mut set_b1 = Set::with_capacity(4);
+        set_b1.insert(0);
+        let mut set_b3 = Set::with_capacity(4);
+        set_b3.insert(0);
+        let b = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![set_b1, Set::with_capacity(4), set_b3],
+                element_variables: vec![1, 2, 2],
+                integer_variables: vec![1, 3, 1],
+                continuous_variables: vec![0.5, 0.0, -2.0],
+            },
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), None);
+        assert_eq!(metadata.dominance(&b, &a), None);
+    }
+
+    #[test]
+    fn none_dominance_by_element() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
+
+        let mut set_a3 = Set::with_capacity(4);
+        set_a3.insert(0);
+        set_a3.insert(1);
+        let a = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(4), Set::with_capacity(4), set_a3],
+                element_variables: vec![0, 1, 2],
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![0.0, 0.0, 0.0],
+            },
+            ..Default::default()
+        };
+        let mut set_b1 = Set::with_capacity(4);
+        set_b1.insert(0);
+        let mut set_b3 = Set::with_capacity(4);
+        set_b3.insert(0);
+        let b = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![set_b1, Set::with_capacity(4), set_b3],
+                element_variables: vec![1, 0, 2],
+                integer_variables: vec![1, 3, 1],
+                continuous_variables: vec![0.5, 0.0, -2.0],
+            },
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), None);
+        assert_eq!(metadata.dominance(&b, &a), None);
+    }
+
+    #[test]
+    fn none_dominance_by_integer() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
+
+        let mut set_a3 = Set::with_capacity(4);
+        set_a3.insert(0);
+        set_a3.insert(1);
+        let a = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(4), Set::with_capacity(4), set_a3],
+                element_variables: vec![0, 1, 2],
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![0.0, 0.0, 0.0],
+            },
+            ..Default::default()
+        };
+        let mut set_b1 = Set::with_capacity(4);
+        set_b1.insert(0);
+        let mut set_b3 = Set::with_capacity(4);
+        set_b3.insert(0);
+        let b = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![set_b1, Set::with_capacity(4), set_b3],
+                element_variables: vec![1, 2, 2],
+                integer_variables: vec![-2, 3, 1],
+                continuous_variables: vec![0.5, 0.0, -2.0],
+            },
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), None);
+        assert_eq!(metadata.dominance(&b, &a), None);
+    }
+
+    #[test]
+    fn none_dominance_by_continuous() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let ob = result.unwrap();
+        let result = metadata.add_set_resource_variable("sr1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_set_resource_variable("sr3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er1", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er2", ob, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable("er3", ob, true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable("ir3", true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr1", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr2", false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable("cr3", true);
+        assert!(result.is_ok());
+
+        let mut set_a3 = Set::with_capacity(4);
+        set_a3.insert(0);
+        set_a3.insert(1);
+        let a = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![Set::with_capacity(4), Set::with_capacity(4), set_a3],
+                element_variables: vec![0, 1, 2],
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![0.0, 0.0, 0.0],
+            },
+            ..Default::default()
+        };
+        let mut set_b1 = Set::with_capacity(4);
+        set_b1.insert(0);
+        let mut set_b3 = Set::with_capacity(4);
+        set_b3.insert(0);
+        let b = State {
+            resource_variables: ResourceVariables {
+                set_variables: vec![set_b1, Set::with_capacity(4), set_b3],
+                element_variables: vec![1, 2, 2],
+                integer_variables: vec![1, 3, 1],
+                continuous_variables: vec![-0.5, 0.0, -2.0],
+            },
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), None);
+        assert_eq!(metadata.dominance(&b, &a), None);
     }
 
     #[test]
@@ -2532,7 +2812,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2543,6 +2822,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2557,7 +2842,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2568,6 +2852,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2577,7 +2867,30 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9]],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2588,25 +2901,11 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
-                element_variables: vec![4, 8, 9, 1],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-        };
-        assert!(metadata.check_state(&state).is_err());
-        let state = State {
-            signature_variables: SignatureVariables {
-                element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
                     Set::with_capacity(10),
                 ],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-            resource_variables: ResourceVariables {
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2616,7 +2915,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2627,6 +2925,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2636,7 +2940,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2647,6 +2950,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2656,7 +2965,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2667,6 +2975,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2676,7 +2990,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2687,6 +3000,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2696,7 +3015,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2707,6 +3025,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0],
@@ -2716,7 +3040,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 10, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2727,26 +3050,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
-                element_variables: vec![4, 8, 9, 1],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-        };
-        assert!(metadata.check_state(&state).is_err());
-        let state = State {
-            signature_variables: SignatureVariables {
-                element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![10], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
                     Set::with_capacity(10),
                     Set::with_capacity(2),
                 ],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-            resource_variables: ResourceVariables {
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2756,7 +3065,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2767,6 +3075,12 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 9, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -2776,7 +3090,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2787,6 +3100,37 @@ mod tests {
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
             },
             resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(11),
+                    Set::with_capacity(2),
+                ],
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
                 element_variables: vec![4, 8, 10, 1],
                 integer_variables: vec![-1, 2, 4, 5],
                 continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
@@ -3266,50 +3610,56 @@ mod tests {
     }
 
     #[test]
-    fn add_vector_variable_ok() {
+    fn add_set_resource_variable_ok() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(v, VectorVariable(0));
+        assert_eq!(v, SetResourceVariable(0));
         assert_eq!(v.id(), 0);
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
+        assert_eq!(
+            metadata.set_resource_variable_names,
+            vec![String::from("v")]
+        );
+        assert_eq!(metadata.set_resource_variable_to_object, vec![0]);
         let mut name_to_variable = FxHashMap::default();
         name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
-        let v = metadata.add_vector_variable(String::from("u"), ob);
+        assert_eq!(metadata.name_to_set_resource_variable, name_to_variable);
+        let v = metadata.add_set_resource_variable(String::from("u"), ob, true);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(v, VectorVariable(1));
+        assert_eq!(v, SetResourceVariable(1));
         assert_eq!(v.id(), 1);
         assert_eq!(
-            metadata.vector_variable_names,
+            metadata.set_resource_variable_names,
             vec![String::from("v"), String::from("u")]
         );
-        assert_eq!(metadata.vector_variable_to_object, vec![0, 0]);
+        assert_eq!(metadata.set_resource_variable_to_object, vec![0, 0]);
         name_to_variable.insert(String::from("u"), 1);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
+        assert_eq!(metadata.name_to_set_resource_variable, name_to_variable);
     }
 
     #[test]
-    fn add_vector_variable_err() {
+    fn add_set_resource_variable_err() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, true);
         assert!(v.is_err());
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
+        assert_eq!(
+            metadata.set_resource_variable_names,
+            vec![String::from("v")]
+        );
+        assert_eq!(metadata.set_resource_variable_to_object, vec![0]);
         let mut name_to_variable = FxHashMap::default();
         name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
+        assert_eq!(metadata.name_to_set_resource_variable, name_to_variable);
 
         let mut metadata2 = StateMetadata::default();
         let ob = metadata2.add_object_type(String::from("something"), 10);
@@ -3317,22 +3667,25 @@ mod tests {
         let ob = metadata2.add_object_type(String::from("other"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("u"), ob);
+        let v = metadata.add_set_resource_variable(String::from("u"), ob, true);
         assert!(v.is_err());
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
+        assert_eq!(
+            metadata.set_resource_variable_names,
+            vec![String::from("v")]
+        );
+        assert_eq!(metadata.set_resource_variable_to_object, vec![0]);
         let mut name_to_variable = FxHashMap::default();
         name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
+        assert_eq!(metadata.name_to_set_resource_variable, name_to_variable);
     }
 
     #[test]
-    fn get_object_type_of_vector_variable_ok() {
+    fn get_object_type_of_set_resource_variable_ok() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
         let v = v.unwrap();
         let ob1 = metadata.get_object_type_of(v);
@@ -3341,26 +3694,71 @@ mod tests {
     }
 
     #[test]
-    fn get_object_type_of_vector_variable_err() {
+    fn get_object_type_of_set_resource_variable_err() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
 
         let mut metadata2 = StateMetadata::default();
         let ob = metadata2.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata2.add_vector_variable(String::from("v"), ob);
+        let v = metadata2.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
-        let v = metadata2.add_vector_variable(String::from("u"), ob);
+        let v = metadata2.add_set_resource_variable(String::from("u"), ob, true);
         assert!(v.is_ok());
         let v = v.unwrap();
 
         let ob = metadata.get_object_type_of(v);
         assert!(ob.is_err());
+    }
+
+    #[test]
+    fn set_resource_variable_preference_ok() {
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, true);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let result = metadata.get_preference(v);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+        let result = metadata.set_preference(v, false);
+        assert!(result.is_ok());
+        assert_eq!(metadata.set_less_is_better, vec![false]);
+        let result = metadata.get_preference(v);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn set_resource_variable_preference_err() {
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, true);
+        assert!(v.is_ok());
+
+        let mut metadata2 = StateMetadata::default();
+        let ob = metadata2.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata2.add_set_resource_variable(String::from("v"), ob, true);
+        assert!(v.is_ok());
+        let v = metadata2.add_set_resource_variable(String::from("u"), ob, true);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let result = metadata.get_preference(v);
+        assert!(result.is_err());
+        let result = metadata.set_preference(v, false);
+        assert!(result.is_err());
+        assert_eq!(metadata.set_less_is_better, vec![true]);
     }
 
     #[test]

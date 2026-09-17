@@ -2,12 +2,14 @@ use super::super::arc_chain::ArcChain;
 use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
     exceed_bound, CreateTransitionChain, GetTransitions, HashableSignatureVariables,
-    StateInformation, TransitionWithId
+    StateInformation, TransitionWithId,
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, Transition,
-    TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, Transition,
+    TransitionInterface,
+};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::sync::atomic;

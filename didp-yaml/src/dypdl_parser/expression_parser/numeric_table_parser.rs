@@ -1,12 +1,12 @@
 use super::argument_parser::{parse_argument, parse_multiple_arguments};
 use super::element_parser;
 use super::util;
-use super::util::ParseErr;
+use super::util::{ModelData, ParseErr};
 use dypdl::expression::{
     ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
 };
 use dypdl::variable_type::Numeric;
-use dypdl::{StateFunctions, StateMetadata, TableData, TableRegistry};
+use dypdl::TableData;
 use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
@@ -16,38 +16,30 @@ type NumericTableParsingResult<'a, T> = Option<(NumericTableExpression<T>, &'a [
 pub fn parse_expression<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
     tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
+        let (y, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table2D(*i, x, y), rest)))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) =
-            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
-        let (z, rest) =
-            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
+        let (y, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
+        let (z, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_args(tokens, metadata, functions, registry, parameters)?;
+        let (args, rest) = parse_args(tokens, model_data, local_variables)?;
         Ok(Some((NumericTableExpression::Table(*i, args), rest)))
     } else {
         let op = match name {
@@ -60,21 +52,14 @@ where
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        let model_data = ModelData {
-            metadata,
-            functions,
-            registry,
-        };
-        parse_reduce(name, rest, op, model_data, parameters, tables)
+        parse_reduce(name, rest, op, model_data, local_variables, tables)
     }
 }
 
 fn parse_args<'a>(
     tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ElementExpression>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -86,40 +71,26 @@ fn parse_args<'a>(
             return Ok((args, rest));
         }
         let (expression, new_xs) =
-            element_parser::parse_expression(xs, metadata, functions, registry, parameters)?;
+            element_parser::parse_expression(xs, model_data, local_variables)?;
         args.push(expression);
         xs = new_xs;
     }
-}
-
-struct ModelData<'a> {
-    metadata: &'a StateMetadata,
-    functions: &'a StateFunctions,
-    registry: &'a TableRegistry,
 }
 
 fn parse_reduce<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     op: ReduceOperator,
-    model_data: ModelData,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
     tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
-    let metadata = model_data.metadata;
-    let functions = model_data.functions;
-    let registry = model_data.registry;
-
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         match x {
             ArgumentExpression::Set(x) => Ok(Some((
                 NumericTableExpression::Table1DReduce(op, *i, x),
-                rest,
-            ))),
-            ArgumentExpression::Vector(x) => Ok(Some((
-                NumericTableExpression::Table1DVectorReduce(op, *i, x),
                 rest,
             ))),
             _ => Err(ParseErr::new(format!(
@@ -127,24 +98,12 @@ fn parse_reduce<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
+        let (y, rest) = parse_argument(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok(Some((
                 NumericTableExpression::Table2DReduce(op, *i, x, y),
-                rest,
-            ))),
-            (ArgumentExpression::Vector(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorReduce(op, *i, x, y),
-                rest,
-            ))),
-            (ArgumentExpression::Set(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DSetVectorReduce(op, *i, x, y),
-                rest,
-            ))),
-            (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorSetReduce(op, *i, x, y),
                 rest,
             ))),
             (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => Ok(Some((
@@ -155,30 +114,21 @@ fn parse_reduce<'a, T: Numeric>(
                 NumericTableExpression::Table2DReduceY(op, *i, x, y),
                 rest,
             ))),
-            (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorReduceX(op, *i, x, y),
-                rest,
-            ))),
-            (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorReduceY(op, *i, x, y),
-                rest,
-            ))),
             (x, y) => Err(ParseErr::new(format!(
                 "arguments `{x:?}` `{y:?}` are invalid for sum",
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
-        let (z, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, model_data, local_variables)?;
+        let (y, rest) = parse_argument(rest, model_data, local_variables)?;
+        let (z, rest) = parse_argument(rest, model_data, local_variables)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
             NumericTableExpression::Table3DReduce(op, *i, x, y, z),
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) =
-            parse_multiple_arguments(tokens, metadata, functions, registry, parameters)?;
+        let (args, rest) = parse_multiple_arguments(tokens, model_data, local_variables)?;
         Ok(Some((
             NumericTableExpression::TableReduce(op, *i, args),
             rest,
@@ -191,7 +141,7 @@ fn parse_reduce<'a, T: Numeric>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
+    use dypdl::expression::{ReferenceExpression, SetExpression};
     use dypdl::*;
 
     fn generate_metadata() -> StateMetadata {
@@ -212,19 +162,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s2"), 2);
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
-
-        let vector_variable_names = vec![
-            String::from("v0"),
-            String::from("v1"),
-            String::from("v2"),
-            String::from("v3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("v0"), 0);
-        name_to_vector_variable.insert(String::from("v1"), 1);
-        name_to_vector_variable.insert(String::from("v2"), 2);
-        name_to_vector_variable.insert(String::from("v3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -258,9 +195,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -326,10 +260,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -351,10 +289,14 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -379,10 +321,14 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -394,17 +340,20 @@ mod tests {
         let result = parse_expression(
             "f1",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
     }
 
-    #[test]
-    fn parse_table_1d_sum_ok() {
+    fn assert_table_1d_reduce_ok(name: &str, op: ReduceOperator) {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let parameters = generate_parameters();
@@ -415,12 +364,16 @@ mod tests {
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(
-            "sum",
+            name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -430,39 +383,32 @@ mod tests {
         assert_eq!(
             expression,
             NumericTableExpression::Table1DReduce(
-                ReduceOperator::Sum,
+                op,
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0))
             )
         );
         assert_eq!(rest, &tokens[3..]);
+    }
 
-        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DVectorReduce(
-                ReduceOperator::Sum,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
+    #[test]
+    fn parse_table_1d_sum_ok() {
+        assert_table_1d_reduce_ok("sum", ReduceOperator::Sum);
+    }
+
+    #[test]
+    fn parse_table_1d_product_ok() {
+        assert_table_1d_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_1d_max_ok() {
+        assert_table_1d_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_1d_min_ok() {
+        assert_table_1d_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]
@@ -479,10 +425,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -494,10 +444,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -509,75 +463,17 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_1d_product_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DReduce(
-                ReduceOperator::Product,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
-
-        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DVectorReduce(
-                ReduceOperator::Product,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
@@ -594,10 +490,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -609,10 +509,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -624,75 +528,17 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_1d_max_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DReduce(
-                ReduceOperator::Max,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
-
-        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DVectorReduce(
-                ReduceOperator::Max,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
@@ -709,10 +555,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -724,10 +574,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -739,75 +593,17 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_1d_min_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DReduce(
-                ReduceOperator::Min,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
-
-        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table1DVectorReduce(
-                ReduceOperator::Min,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
@@ -824,10 +620,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -839,10 +639,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -854,10 +658,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -877,10 +685,14 @@ mod tests {
         let result = parse_expression(
             "f2",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -912,17 +724,20 @@ mod tests {
         let result = parse_expression(
             "f2",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
     }
 
-    #[test]
-    fn parse_table_2d_sum_ok() {
+    fn assert_table_2d_reduce_ok(name: &str, op: ReduceOperator) {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let parameters = generate_parameters();
@@ -933,12 +748,16 @@ mod tests {
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(
-            "sum",
+            name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -948,93 +767,9 @@ mod tests {
         assert_eq!(
             expression,
             NumericTableExpression::Table2DReduce(
-                ReduceOperator::Sum,
+                op.clone(),
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduce(
-                ReduceOperator::Sum,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DSetVectorReduce(
-                ReduceOperator::Sum,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorSetReduce(
-                ReduceOperator::Sum,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 SetExpression::Reference(ReferenceExpression::Variable(1))
             )
         );
@@ -1045,12 +780,16 @@ mod tests {
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(
-            "sum",
+            name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1060,7 +799,7 @@ mod tests {
         assert_eq!(
             expression,
             NumericTableExpression::Table2DReduceX(
-                ReduceOperator::Sum,
+                op.clone(),
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0)
@@ -1073,12 +812,16 @@ mod tests {
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(
-            "sum",
+            name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -1088,69 +831,33 @@ mod tests {
         assert_eq!(
             expression,
             NumericTableExpression::Table2DReduceY(
-                ReduceOperator::Sum,
+                op,
                 0,
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0))
             )
         );
         assert_eq!(rest, &tokens[4..]);
+    }
 
-        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceX(
-                ReduceOperator::Sum,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
+    #[test]
+    fn parse_table_2d_sum_ok() {
+        assert_table_2d_reduce_ok("sum", ReduceOperator::Sum);
+    }
 
-        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "sum",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceY(
-                ReduceOperator::Sum,
-                0,
-                ElementExpression::Constant(0),
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
+    #[test]
+    fn parse_table_2d_product_ok() {
+        assert_table_2d_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_2d_max_ok() {
+        assert_table_2d_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_2d_min_ok() {
+        assert_table_2d_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]
@@ -1167,10 +874,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1182,10 +893,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1197,245 +912,17 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_2d_product_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduce(
-                ReduceOperator::Product,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduce(
-                ReduceOperator::Product,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DSetVectorReduce(
-                ReduceOperator::Product,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorSetReduce(
-                ReduceOperator::Product,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceX(
-                ReduceOperator::Product,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceY(
-                ReduceOperator::Product,
-                0,
-                ElementExpression::Constant(0),
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceX(
-                ReduceOperator::Product,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceY(
-                ReduceOperator::Product,
-                0,
-                ElementExpression::Constant(0),
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
@@ -1452,10 +939,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1467,10 +958,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1482,245 +977,17 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_2d_max_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduce(
-                ReduceOperator::Max,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduce(
-                ReduceOperator::Max,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DSetVectorReduce(
-                ReduceOperator::Max,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorSetReduce(
-                ReduceOperator::Max,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceX(
-                ReduceOperator::Max,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceY(
-                ReduceOperator::Max,
-                0,
-                ElementExpression::Constant(0),
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceX(
-                ReduceOperator::Max,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceY(
-                ReduceOperator::Max,
-                0,
-                ElementExpression::Constant(0),
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
@@ -1737,10 +1004,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1752,10 +1023,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -1767,245 +1042,17 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_2d_min_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduce(
-                ReduceOperator::Min,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduce(
-                ReduceOperator::Min,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DSetVectorReduce(
-                ReduceOperator::Min,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                VectorExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorSetReduce(
-                ReduceOperator::Min,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                SetExpression::Reference(ReferenceExpression::Variable(1))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceX(
-                ReduceOperator::Min,
-                0,
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DReduceY(
-                ReduceOperator::Min,
-                0,
-                ElementExpression::Constant(0),
-                SetExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceX(
-                ReduceOperator::Min,
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ElementExpression::Variable(0)
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::Table2DVectorReduceY(
-                ReduceOperator::Min,
-                0,
-                ElementExpression::Constant(0),
-                VectorExpression::Reference(ReferenceExpression::Variable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
@@ -2022,10 +1069,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2037,10 +1088,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2052,10 +1107,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2075,10 +1134,14 @@ mod tests {
         let result = parse_expression(
             "f3",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2111,10 +1174,14 @@ mod tests {
         let result = parse_expression(
             "f3",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2134,10 +1201,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2171,10 +1242,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2194,10 +1269,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2231,10 +1310,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2254,10 +1337,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2291,10 +1378,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2314,10 +1405,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2351,10 +1446,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2374,10 +1473,14 @@ mod tests {
         let result = parse_expression(
             "f4",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2412,33 +1515,40 @@ mod tests {
         let result = parse_expression(
             "f4",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
     }
 
-    #[test]
-    fn parse_table_sum_ok() {
+    fn assert_table_reduce_ok(name: &str, op: ReduceOperator) {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(
-            "sum",
+            name,
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_ok());
@@ -2448,7 +1558,7 @@ mod tests {
         assert_eq!(
             expression,
             NumericTableExpression::TableReduce(
-                ReduceOperator::Sum,
+                op,
                 0,
                 vec![
                     ArgumentExpression::Set(SetExpression::Reference(
@@ -2456,13 +1566,31 @@ mod tests {
                     )),
                     ArgumentExpression::Element(ElementExpression::Constant(1)),
                     ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(3)
-                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ]
             )
         );
         assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_table_sum_ok() {
+        assert_table_reduce_ok("sum", ReduceOperator::Sum);
+    }
+
+    #[test]
+    fn parse_table_product_ok() {
+        assert_table_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_max_ok() {
+        assert_table_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_min_ok() {
+        assert_table_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]
@@ -2479,10 +1607,14 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2494,57 +1626,17 @@ mod tests {
         let result = parse_expression(
             "sum",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_product_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "product",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::TableReduce(
-                ReduceOperator::Product,
-                0,
-                vec![
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Variable(2)
-                    )),
-                    ArgumentExpression::Element(ElementExpression::Constant(1)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(3)
-                    )),
-                ]
-            )
-        );
-        assert_eq!(rest, &tokens[6..]);
     }
 
     #[test]
@@ -2561,10 +1653,14 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2576,57 +1672,17 @@ mod tests {
         let result = parse_expression(
             "product",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_max_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "max",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::TableReduce(
-                ReduceOperator::Max,
-                0,
-                vec![
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Variable(2)
-                    )),
-                    ArgumentExpression::Element(ElementExpression::Constant(1)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(3)
-                    )),
-                ]
-            )
-        );
-        assert_eq!(rest, &tokens[6..]);
     }
 
     #[test]
@@ -2643,10 +1699,14 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2658,57 +1718,17 @@ mod tests {
         let result = parse_expression(
             "max",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_table_min_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(
-            "min",
-            &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-            &registry.integer_tables,
-        );
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericTableExpression::TableReduce(
-                ReduceOperator::Min,
-                0,
-                vec![
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Variable(2)
-                    )),
-                    ArgumentExpression::Element(ElementExpression::Constant(1)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(3)
-                    )),
-                ]
-            )
-        );
-        assert_eq!(rest, &tokens[6..]);
     }
 
     #[test]
@@ -2725,10 +1745,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());
@@ -2740,10 +1764,14 @@ mod tests {
         let result = parse_expression(
             "min",
             &tokens,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
             &registry.integer_tables,
         );
         assert!(result.is_err());

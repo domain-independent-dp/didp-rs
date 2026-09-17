@@ -2,20 +2,20 @@ use super::continuous_parser;
 use super::element_parser;
 use super::integer_parser;
 use super::util;
-use super::util::ParseErr;
+use super::util::{ModelData, ParseErr};
 use dypdl::expression::{
     ComparisonOperator, Condition, ContinuousExpression, ElementExpression, IntegerExpression,
-    SetCondition, SetExpression,
+    Quantifier, SetCondition, SetExpression,
 };
+#[cfg(test)]
+use dypdl::LocalVariableData;
 use dypdl::StateFunctions;
 use rustc_hash::FxHashMap;
 
-pub fn parse_expression<'a, 'b>(
+pub fn parse_expression<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
@@ -28,27 +28,28 @@ pub fn parse_expression<'a, 'b>(
             if let Some((expression, rest)) = element_parser::parse_table_expression(
                 name,
                 rest,
-                metadata,
-                functions,
-                registry,
-                parameters,
-                &registry.bool_tables,
+                model_data,
+                local_variables,
+                &model_data.registry.bool_tables,
             )? {
                 Ok((Condition::Table(Box::new(expression)), rest))
-            } else if let Some((expression, rest)) =
-                parse_parameterized_state_function(name, rest, functions, parameters)?
-            {
+            } else if let Some((expression, rest)) = parse_parameterized_state_function(
+                name,
+                rest,
+                model_data.functions,
+                model_data.parameters,
+            )? {
                 Ok((expression, rest))
             } else {
-                parse_operation(name, rest, metadata, functions, registry, parameters)
+                parse_operation(name, rest, model_data, local_variables)
             }
         }
         "true" => Ok((Condition::Constant(true), rest)),
         "false" => Ok((Condition::Constant(false), rest)),
         key => {
-            if let Some(value) = registry.bool_tables.name_to_constant.get(key) {
+            if let Some(value) = model_data.registry.bool_tables.name_to_constant.get(key) {
                 Ok((Condition::Constant(*value), rest))
-            } else if let Ok(condition) = functions.get_boolean_function(key) {
+            } else if let Ok(condition) = model_data.functions.get_boolean_function(key) {
                 Ok((condition, rest))
             } else {
                 Err(ParseErr::new(format!("unexpected token: `{token}`")))
@@ -71,40 +72,51 @@ fn parse_parameterized_state_function<'a>(
         .unwrap_or_else(|_| Ok(None))
 }
 
-fn parse_operation<'a, 'b>(
-    name: &'a str,
+fn parse_operation<'a>(
+    name: &str,
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     match name {
         "not" => {
-            let (condition, rest) =
-                parse_expression(tokens, metadata, functions, registry, parameters)?;
+            let (condition, rest) = parse_expression(tokens, model_data, local_variables)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Not(Box::new(condition)), rest))
         }
         "and" => {
-            let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
-            let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, model_data, local_variables)?;
+            let (y, rest) = parse_expression(rest, model_data, local_variables)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::And(Box::new(x), Box::new(y)), rest))
         }
         "or" => {
-            let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
-            let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, model_data, local_variables)?;
+            let (y, rest) = parse_expression(rest, model_data, local_variables)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
         }
+        "any" => {
+            let (set, id, condition, rest) =
+                parse_quantified_condition(tokens, model_data, local_variables)?;
+            Ok((
+                Condition::Quantified(Quantifier::Any, Box::new(set), id, Box::new(condition)),
+                rest,
+            ))
+        }
+        "all" => {
+            let (set, id, condition, rest) =
+                parse_quantified_condition(tokens, model_data, local_variables)?;
+            Ok((
+                Condition::Quantified(Quantifier::All, Box::new(set), id, Box::new(condition)),
+                rest,
+            ))
+        }
         "is_in" => {
-            let (element, rest) = element_parser::parse_expression(
-                tokens, metadata, functions, registry, parameters,
-            )?;
-            let (set, rest) = element_parser::parse_set_expression(
-                rest, metadata, functions, registry, parameters,
-            )?;
+            let (element, rest) =
+                element_parser::parse_expression(tokens, model_data, local_variables)?;
+            let (set, rest) =
+                element_parser::parse_set_expression(rest, model_data, local_variables)?;
             let rest = util::parse_closing(rest)?;
             Ok((
                 Condition::Set(Box::new(SetCondition::IsIn(element, set))),
@@ -112,25 +124,39 @@ fn parse_operation<'a, 'b>(
             ))
         }
         "is_empty" => {
-            let (set, rest) = element_parser::parse_set_expression(
-                tokens, metadata, functions, registry, parameters,
-            )?;
+            let (set, rest) =
+                element_parser::parse_set_expression(tokens, model_data, local_variables)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(Box::new(SetCondition::IsEmpty(set))), rest))
         }
-        _ => parse_comparison(name, tokens, metadata, functions, registry, parameters),
+        _ => parse_comparison(name, tokens, model_data, local_variables),
     }
 }
 
-fn parse_comparison<'a, 'b>(
-    operator: &'a str,
+// `(any|all <name> <set expression> <condition>)` evaluates `<condition>` for the
+// elements of `<set expression>`. `<name>` is bound only while parsing `<condition>`.
+fn parse_quantified_condition<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
+) -> Result<(SetExpression, usize, Condition, &'a [String]), ParseErr> {
+    let (name, rest) = util::get_next_token_and_rest(tokens)?;
+    let (set, rest) = element_parser::parse_set_expression(rest, model_data, local_variables)?;
+    let (id, local_variables) = util::bind_local_variable(model_data, name, local_variables);
+    let (condition, rest) = parse_expression(rest, model_data, &local_variables)?;
+    let rest = util::parse_closing(rest)?;
+    Ok((set, id, condition, rest))
+}
+
+fn parse_comparison<'a>(
+    operator: &str,
+    tokens: &'a [String],
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
-    if let Ok((x, y, rest)) = parse_ss(tokens, metadata, functions, registry, parameters) {
+    if let Ok((x, y, rest)) = util::try_parse(model_data, |model_data| {
+        parse_ss(tokens, model_data, local_variables)
+    }) {
         match operator {
             "=" => Ok((Condition::Set(Box::new(SetCondition::IsEqual(x, y))), rest)),
             "!=" => Ok((
@@ -152,19 +178,21 @@ fn parse_comparison<'a, 'b>(
             "<" => ComparisonOperator::Lt,
             _ => return Err(ParseErr::new(format!("no such operator `{operator}`"))),
         };
-        if let Ok((x, y, rest)) = parse_ii(tokens, metadata, functions, registry, parameters) {
+        if let Ok((x, y, rest)) = util::try_parse(model_data, |model_data| {
+            parse_ii(tokens, model_data, local_variables)
+        }) {
             Ok((
                 Condition::ComparisonI(operator, Box::new(x), Box::new(y)),
                 rest,
             ))
-        } else if let Ok((x, y, rest)) = parse_cc(tokens, metadata, functions, registry, parameters)
-        {
+        } else if let Ok((x, y, rest)) = util::try_parse(model_data, |model_data| {
+            parse_cc(tokens, model_data, local_variables)
+        }) {
             Ok((
                 Condition::ComparisonC(operator, Box::new(x), Box::new(y)),
                 rest,
             ))
-        } else if let Ok((x, y, rest)) = parse_ee(tokens, metadata, functions, registry, parameters)
-        {
+        } else if let Ok((x, y, rest)) = parse_ee(tokens, model_data, local_variables) {
             Ok((
                 Condition::ComparisonE(operator, Box::new(x), Box::new(y)),
                 rest,
@@ -177,62 +205,46 @@ fn parse_comparison<'a, 'b>(
     }
 }
 
-fn parse_ss<'a, 'b>(
+fn parse_ss<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(SetExpression, SetExpression, &'a [String]), ParseErr> {
-    let (x, rest) =
-        element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)?;
-    let (y, rest) =
-        element_parser::parse_set_expression(rest, metadata, functions, registry, parameters)?;
+    let (x, rest) = element_parser::parse_set_expression(tokens, model_data, local_variables)?;
+    let (y, rest) = element_parser::parse_set_expression(rest, model_data, local_variables)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
 
-fn parse_ii<'a, 'b>(
+fn parse_ii<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(IntegerExpression, IntegerExpression, &'a [String]), ParseErr> {
-    let (x, rest) =
-        integer_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-    let (y, rest) =
-        integer_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+    let (x, rest) = integer_parser::parse_expression(tokens, model_data, local_variables)?;
+    let (y, rest) = integer_parser::parse_expression(rest, model_data, local_variables)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
 
-fn parse_cc<'a, 'b>(
+fn parse_cc<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(ContinuousExpression, ContinuousExpression, &'a [String]), ParseErr> {
-    let (x, rest) =
-        continuous_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-    let (y, rest) =
-        continuous_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+    let (x, rest) = continuous_parser::parse_expression(tokens, model_data, local_variables)?;
+    let (y, rest) = continuous_parser::parse_expression(rest, model_data, local_variables)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
 
-fn parse_ee<'a, 'b>(
+fn parse_ee<'a>(
     tokens: &'a [String],
-    metadata: &'b dypdl::StateMetadata,
-    functions: &'b dypdl::StateFunctions,
-    registry: &'b dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
+    model_data: &mut ModelData,
+    local_variables: &FxHashMap<String, usize>,
 ) -> Result<(ElementExpression, ElementExpression, &'a [String]), ParseErr> {
-    let (x, rest) =
-        element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
-    let (y, rest) =
-        element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+    let (x, rest) = element_parser::parse_expression(tokens, model_data, local_variables)?;
+    let (y, rest) = element_parser::parse_expression(rest, model_data, local_variables)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -374,14 +386,34 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "2", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -393,19 +425,49 @@ mod tests {
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["f0", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(true));
 
         let tokens: Vec<String> = ["true", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(true));
 
         let tokens: Vec<String> = ["false", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(false));
@@ -423,7 +485,17 @@ mod tests {
         .iter()
         .map(|x| String::from(*x))
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -453,7 +525,17 @@ mod tests {
         .iter()
         .map(|x| String::from(*x))
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -469,7 +551,17 @@ mod tests {
         let expected = result.unwrap();
 
         let tokens: Vec<String> = ["sf", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, expected);
@@ -490,7 +582,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, expected);
@@ -509,7 +611,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -527,7 +639,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -541,7 +663,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -564,14 +696,34 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "not", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -580,7 +732,17 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -596,7 +758,17 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -624,14 +796,34 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "and", "(", "is_empty", "s0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -641,7 +833,17 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -657,7 +859,17 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -685,14 +897,34 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "or", "(", "is_empty", "s0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -702,8 +934,73 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_any_and_all_ok() {
+        let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let mut local_variable_data = LocalVariableData::default();
+        let tokens: Vec<String> = [
+            "(", "and", "(", "any", "x", "s0", "(", ">", "x", "1", ")", ")", "(", "all", "y", "s1",
+            "(", "<=", "y", "2", ")", ")", ")", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut local_variable_data,
+            },
+            &FxHashMap::default(),
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::And(
+                Box::new(Condition::Quantified(
+                    Quantifier::Any,
+                    Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                    0,
+                    Box::new(Condition::ComparisonE(
+                        ComparisonOperator::Gt,
+                        Box::new(ElementExpression::LocalVariable(0)),
+                        Box::new(ElementExpression::Constant(1)),
+                    )),
+                )),
+                Box::new(Condition::Quantified(
+                    Quantifier::All,
+                    Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+                    1,
+                    Box::new(Condition::ComparisonE(
+                        ComparisonOperator::Le,
+                        Box::new(ElementExpression::LocalVariable(1)),
+                        Box::new(ElementExpression::Constant(2)),
+                    )),
+                )),
+            )
+        );
+        assert_eq!(rest, &tokens[23..]);
     }
 
     #[test]
@@ -717,7 +1014,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -741,7 +1048,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -765,28 +1082,68 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -800,7 +1157,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -824,21 +1191,51 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "=", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "=", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -852,7 +1249,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -876,21 +1283,51 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "!=", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "!=", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -904,7 +1341,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -928,21 +1375,51 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_subset", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_subset", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -957,7 +1434,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -971,7 +1458,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -994,14 +1491,34 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_empty", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 
@@ -1016,7 +1533,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1033,7 +1560,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1050,7 +1587,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1067,7 +1614,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1084,7 +1641,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1101,7 +1668,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1118,7 +1695,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1135,7 +1722,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1152,7 +1749,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1169,7 +1776,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1186,7 +1803,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1203,7 +1830,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1220,7 +1857,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1237,7 +1884,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1254,7 +1911,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1271,7 +1938,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1288,7 +1965,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1305,7 +1992,17 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1330,21 +2027,51 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "==", "1.5", "e0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "==", "e0", "1.5", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        let result = parse_expression(
+            &tokens,
+            &mut ModelData {
+                metadata: &metadata,
+                functions: &functions,
+                registry: &registry,
+                parameters: &parameters,
+                local_variable_data: &mut LocalVariableData::default(),
+            },
+            &FxHashMap::default(),
+        );
         assert!(result.is_err());
     }
 }

@@ -39,14 +39,8 @@ tables:
     args:
       - customer
       - customer
-  - name: min_distance_to
+  - name: min_distance_to_goal
     type: integer
-    args:
-      - customer
-  - name: min_distance_from
-    type: integer
-    args:
-      - customer
 transitions:
   - name: visit
     parameters:
@@ -72,5 +66,4 @@ base_cases:
   - - (is_empty unvisited)
     - (= location goal)
 dual_bounds:
-  - (+ (sum min_distance_to unvisited) (if (!= location goal) (min_distance_to goal) 0))
-  - (+ (sum min_distance_from unvisited) (min_distance_from location))
+  - (if (!= location goal) (+ (minimum_spanning_tree (add location unvisited) distance connected) min_distance_to_goal) 0)

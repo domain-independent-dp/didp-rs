@@ -1,9 +1,10 @@
 use super::argument_expression::ArgumentExpression;
 use super::element_expression::ElementExpression;
+use super::local_environment::LocalEnvironment;
 use super::numeric_operator::ReduceOperator;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::vector_expression::VectorExpression;
+use super::substitute_local_variable::SubstituteLocalVariable;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table::{Table1D, Table2D};
@@ -20,7 +21,7 @@ pub enum NumericTableExpression<T: Numeric> {
     Constant(T),
     /// Constant in a table.
     Table(usize, Vec<ElementExpression>),
-    /// Reduce constants over sets and vectors in a table.
+    /// Reduce constants over sets in a table.
     TableReduce(ReduceOperator, usize, Vec<ArgumentExpression>),
     /// Constant in a 1D table.
     Table1D(usize, ElementExpression),
@@ -35,25 +36,13 @@ pub enum NumericTableExpression<T: Numeric> {
     ),
     /// Reduce constants over a set in a 1D table.
     Table1DReduce(ReduceOperator, usize, SetExpression),
-    /// Reduce constants over a vector in a 1D table.
-    Table1DVectorReduce(ReduceOperator, usize, VectorExpression),
     /// Reduce constants over two sets in a 2D table.
     Table2DReduce(ReduceOperator, usize, SetExpression, SetExpression),
-    /// Reduce constants over two vectors in a 2D table.
-    Table2DVectorReduce(ReduceOperator, usize, VectorExpression, VectorExpression),
-    /// Reduce constants over a set and a vector in a 2D table.
-    Table2DSetVectorReduce(ReduceOperator, usize, SetExpression, VectorExpression),
-    /// Reduce constants over a vector and a set in a 2D table.
-    Table2DVectorSetReduce(ReduceOperator, usize, VectorExpression, SetExpression),
     /// Reduce constants over a set in a 2D table.
     Table2DReduceX(ReduceOperator, usize, SetExpression, ElementExpression),
     /// Reduce constants over a set in a 2D table.
     Table2DReduceY(ReduceOperator, usize, ElementExpression, SetExpression),
-    /// Reduce constants over a vector in a 2D table.
-    Table2DVectorReduceX(ReduceOperator, usize, VectorExpression, ElementExpression),
-    /// Reduce constants over a vector in a 2D table.
-    Table2DVectorReduceY(ReduceOperator, usize, ElementExpression, VectorExpression),
-    /// Reduce constants over sets and vectors in a 3D table.
+    /// Reduce constants over sets in a 3D table.
     Table3DReduce(
         ReduceOperator,
         usize,
@@ -64,15 +53,100 @@ pub enum NumericTableExpression<T: Numeric> {
 }
 
 impl<T: Numeric> NumericTableExpression<T> {
+    /// Converts a reduce whose body is a direct table lookup into a table reduce.
+    ///
+    /// Returns `None` when the local variable is not used as exactly one complete
+    /// table index. In particular, repeated uses such as `table[x, x]` cannot be
+    /// represented by the Cartesian-product semantics of table reductions.
+    pub(super) fn reduce(
+        &self,
+        op: &ReduceOperator,
+        set: &SetExpression,
+        id: usize,
+    ) -> Option<Self> {
+        fn contains_local_variable(expression: &ElementExpression, id: usize) -> bool {
+            expression.substitute_local_variable(id, usize::MAX) != *expression
+        }
+
+        fn argument(
+            expression: &ElementExpression,
+            set: &SetExpression,
+            id: usize,
+        ) -> Option<(ArgumentExpression, bool)> {
+            if *expression == ElementExpression::LocalVariable(id) {
+                Some((ArgumentExpression::Set(set.clone()), true))
+            } else if contains_local_variable(expression, id) {
+                None
+            } else {
+                Some((ArgumentExpression::Element(expression.clone()), false))
+            }
+        }
+
+        match self {
+            Self::Table(i, args) => {
+                let mut found = false;
+                let mut reduced_args = Vec::with_capacity(args.len());
+                for expression in args {
+                    let (arg, replaced) = argument(expression, set, id)?;
+                    if replaced && found {
+                        return None;
+                    }
+                    found |= replaced;
+                    reduced_args.push(arg);
+                }
+                found.then(|| Self::TableReduce(op.clone(), *i, reduced_args))
+            }
+            Self::Table1D(i, x) if *x == ElementExpression::LocalVariable(id) => {
+                Some(Self::Table1DReduce(op.clone(), *i, set.clone()))
+            }
+            Self::Table2D(i, x, y) => {
+                let x_is_local = *x == ElementExpression::LocalVariable(id);
+                let y_is_local = *y == ElementExpression::LocalVariable(id);
+                match (x_is_local, y_is_local) {
+                    (true, false) if !contains_local_variable(y, id) => {
+                        Some(Self::Table2DReduceX(op.clone(), *i, set.clone(), y.clone()))
+                    }
+                    (false, true) if !contains_local_variable(x, id) => {
+                        Some(Self::Table2DReduceY(op.clone(), *i, x.clone(), set.clone()))
+                    }
+                    _ => None,
+                }
+            }
+            Self::Table3D(i, x, y, z) => {
+                let mut found = false;
+                let mut args = Vec::with_capacity(3);
+                for expression in [x, y, z] {
+                    let (arg, replaced) = argument(expression, set, id)?;
+                    if replaced && found {
+                        return None;
+                    }
+                    found |= replaced;
+                    args.push(arg);
+                }
+                found.then(|| {
+                    Self::Table3DReduce(
+                        op.clone(),
+                        *i,
+                        args[0].clone(),
+                        args[1].clone(),
+                        args[2].clone(),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Returns the evaluation result.
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transitioned state is used or an empty set is passed to a reduce operation or a min/max reduce operation is performed on an empty set.
     pub fn eval<U: StateInterface>(
         &self,
         state: &U,
         function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
         state_functions: &StateFunctions,
         registry: &TableRegistry,
         tables: &TableData<T>,
@@ -82,7 +156,15 @@ impl<T: Numeric> NumericTableExpression<T> {
             Self::Table(i, args) => {
                 let args: Vec<Element> = args
                     .iter()
-                    .map(|x| x.eval(state, function_cache, state_functions, registry))
+                    .map(|x| {
+                        x.eval_with_local_environment(
+                            state,
+                            function_cache,
+                            local_environment,
+                            state_functions,
+                            registry,
+                        )
+                    })
                     .collect();
                 tables.tables[*i].eval(&args)
             }
@@ -91,57 +173,89 @@ impl<T: Numeric> NumericTableExpression<T> {
                     args.iter(),
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 );
                 op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
                     .unwrap()
             }
-            Self::Table1D(i, x) => {
-                tables.tables_1d[*i].eval(x.eval(state, function_cache, state_functions, registry))
-            }
+            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval_with_local_environment(
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            )),
             Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table3D(i, x, y, z) => tables.tables_3d[*i].eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
-                z.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                z.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::Table1DReduce(op, i, SetExpression::Reference(x)) => Self::reduce_table_1d(
                 op,
                 &tables.tables_1d[*i],
-                x.eval(state, function_cache, state_functions, registry)
-                    .ones(),
+                x.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
+                .ones(),
             ),
             Self::Table1DReduce(op, i, SetExpression::StateFunction(x)) => Self::reduce_table_1d(
                 op,
                 &tables.tables_1d[*i],
                 function_cache
-                    .get_set_value(*x, state, state_functions, registry)
+                    .get_set_value(*x, state, local_environment, state_functions, registry)
                     .ones(),
             ),
             Self::Table1DReduce(op, i, x) => Self::reduce_table_1d(
                 op,
                 &tables.tables_1d[*i],
-                x.eval(state, function_cache, state_functions, registry)
-                    .ones(),
-            ),
-            Self::Table1DVectorReduce(op, i, VectorExpression::Reference(x)) => {
-                Self::reduce_table_1d(
-                    op,
-                    &tables.tables_1d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied(),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
                 )
-            }
-            Self::Table1DVectorReduce(op, i, x) => Self::reduce_table_1d(
-                op,
-                &tables.tables_1d[*i],
-                x.eval(state, function_cache, state_functions, registry)
-                    .into_iter(),
+                .ones(),
             ),
             Self::Table2DReduce(
                 op,
@@ -149,8 +263,14 @@ impl<T: Numeric> NumericTableExpression<T> {
                 SetExpression::StateFunction(x),
                 SetExpression::StateFunction(y),
             ) => {
-                let (x, y) =
-                    function_cache.get_set_value_pair(*x, *y, state, state_functions, registry);
+                let (x, y) = function_cache.get_set_value_pair(
+                    *x,
+                    *y,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x.ones(), y)
             }
             Self::Table2DReduce(
@@ -159,9 +279,15 @@ impl<T: Numeric> NumericTableExpression<T> {
                 SetExpression::StateFunction(x),
                 SetExpression::Reference(y),
             ) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 let x = function_cache
-                    .get_set_value(*x, state, state_functions, registry)
+                    .get_set_value(*x, state, local_environment, state_functions, registry)
                     .ones();
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
             }
@@ -172,21 +298,51 @@ impl<T: Numeric> NumericTableExpression<T> {
                 SetExpression::StateFunction(y),
             ) => {
                 let x = x
-                    .eval(state, function_cache, state_functions, registry)
+                    .eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                     .ones();
-                let y = function_cache.get_set_value(*y, state, state_functions, registry);
+                let y = function_cache.get_set_value(
+                    *y,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DReduce(op, i, SetExpression::StateFunction(x), y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 let x = function_cache
-                    .get_set_value(*x, state, state_functions, registry)
+                    .get_set_value(*x, state, local_environment, state_functions, registry)
                     .ones();
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
             }
             Self::Table2DReduce(op, i, x, SetExpression::StateFunction(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = function_cache.get_set_value(*y, state, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = function_cache.get_set_value(
+                    *y,
+                    state,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x.ones(), y)
             }
             Self::Table2DReduce(
@@ -196,234 +352,169 @@ impl<T: Numeric> NumericTableExpression<T> {
                 SetExpression::Reference(y),
             ) => {
                 let x = x
-                    .eval(state, function_cache, state_functions, registry)
+                    .eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                     .ones();
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DReduce(op, i, SetExpression::Reference(x), y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 let x = x
-                    .eval(state, function_cache, state_functions, registry)
+                    .eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                     .ones();
                 Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
             }
             Self::Table2DReduce(op, i, x, SetExpression::Reference(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
+                let y = y.eval(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_x(op, &tables.tables_2d[*i], &x, y.ones())
             }
             Self::Table2DReduce(op, i, x, y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_set_y(
                     op,
                     &tables.tables_2d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .ones(),
+                    x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
+                    .ones(),
                     &y,
                 )
             }
-            Self::Table2DVectorReduce(
-                op,
-                i,
-                VectorExpression::Reference(x),
-                VectorExpression::Reference(y),
-            ) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduce(op, i, VectorExpression::Reference(x), y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduce(op, i, x, VectorExpression::Reference(y)) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduce(op, i, x, y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DSetVectorReduce(
-                op,
-                i,
-                SetExpression::Reference(x),
-                VectorExpression::Reference(y),
-            ) => {
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .ones();
-                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DSetVectorReduce(op, i, SetExpression::Reference(x), y) => {
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                Self::reduce_table_2d(
-                    op,
-                    &tables.tables_2d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .ones(),
-                    y,
-                )
-            }
-            Self::Table2DSetVectorReduce(op, i, x, VectorExpression::Reference(y)) => {
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                Self::reduce_table_2d(
-                    op,
-                    &tables.tables_2d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .ones(),
-                    y,
-                )
-            }
-            Self::Table2DSetVectorReduce(op, i, x, y) => {
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                Self::reduce_table_2d(
-                    op,
-                    &tables.tables_2d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .ones(),
-                    y,
-                )
-            }
-            Self::Table2DVectorSetReduce(
-                op,
-                i,
-                VectorExpression::Reference(x),
-                SetExpression::Reference(y),
-            ) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorSetReduce(op, i, x, SetExpression::Reference(y)) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorSetReduce(op, i, VectorExpression::Reference(x), y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
-            }
-            Self::Table2DVectorSetReduce(op, i, x, y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
-            }
             Self::Table2DReduceX(op, i, SetExpression::Reference(x), y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 let x = x
-                    .eval(state, function_cache, state_functions, registry)
+                    .eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                     .ones();
                 Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DReduceX(op, i, x, y) => {
-                let y = y.eval(state, function_cache, state_functions, registry);
+                let y = y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_x(
                     op,
                     &tables.tables_2d[*i],
-                    x.eval(state, function_cache, state_functions, registry)
-                        .ones(),
+                    x.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
+                    .ones(),
                     y,
                 )
             }
             Self::Table2DReduceY(op, i, x, SetExpression::Reference(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 let y = y
-                    .eval(state, function_cache, state_functions, registry)
+                    .eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
                     .ones();
                 Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DReduceY(op, i, x, y) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
+                let x = x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                );
                 Self::reduce_table_2d_y(
                     op,
                     &tables.tables_2d[*i],
                     x,
-                    y.eval(state, function_cache, state_functions, registry)
-                        .ones(),
+                    y.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
+                    .ones(),
                 )
-            }
-            Self::Table2DVectorReduceX(op, i, VectorExpression::Reference(x), y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduceX(op, i, x, y) => {
-                let x = x
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                let y = y.eval(state, function_cache, state_functions, registry);
-                Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduceY(op, i, x, VectorExpression::Reference(y)) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .iter()
-                    .copied();
-                Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
-            }
-            Self::Table2DVectorReduceY(op, i, x, y) => {
-                let x = x.eval(state, function_cache, state_functions, registry);
-                let y = y
-                    .eval(state, function_cache, state_functions, registry)
-                    .into_iter();
-                Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table3DReduce(op, i, x, y, z) => {
                 let args = ArgumentExpression::eval_args(
                     [x, y, z].into_iter(),
                     state,
                     function_cache,
+                    local_environment,
                     state_functions,
                     registry,
                 );
@@ -440,7 +531,7 @@ impl<T: Numeric> NumericTableExpression<T> {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(
         &self,
         registry: &TableRegistry,
@@ -501,12 +592,6 @@ impl<T: Numeric> NumericTableExpression<T> {
                 }
                 x => Self::Table1DReduce(op.clone(), *i, x),
             },
-            Self::Table1DVectorReduce(op, i, x) => match x.simplify(registry) {
-                VectorExpression::Reference(ReferenceExpression::Constant(x)) => Self::Constant(
-                    Self::reduce_table_1d(op, &tables.tables_1d[*i], x.into_iter()),
-                ),
-                x => Self::Table1DVectorReduce(op.clone(), *i, x),
-            },
             Self::Table2DReduce(op, i, x, y) => {
                 match (x.simplify(registry), y.simplify(registry)) {
                     (
@@ -519,48 +604,6 @@ impl<T: Numeric> NumericTableExpression<T> {
                         &y,
                     )),
                     (x, y) => Self::Table2DReduce(op.clone(), *i, x, y),
-                }
-            }
-            Self::Table2DVectorReduce(op, i, x, y) => {
-                match (x.simplify(registry), y.simplify(registry)) {
-                    (
-                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(Self::reduce_table_2d(
-                        op,
-                        &tables.tables_2d[*i],
-                        x.into_iter(),
-                        y.into_iter(),
-                    )),
-                    (x, y) => Self::Table2DVectorReduce(op.clone(), *i, x, y),
-                }
-            }
-            Self::Table2DSetVectorReduce(op, i, x, y) => {
-                match (x.simplify(registry), y.simplify(registry)) {
-                    (
-                        SetExpression::Reference(ReferenceExpression::Constant(x)),
-                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(Self::reduce_table_2d(
-                        op,
-                        &tables.tables_2d[*i],
-                        x.ones(),
-                        y.into_iter(),
-                    )),
-                    (x, y) => Self::Table2DSetVectorReduce(op.clone(), *i, x, y),
-                }
-            }
-            Self::Table2DVectorSetReduce(op, i, x, y) => {
-                match (x.simplify(registry), y.simplify(registry)) {
-                    (
-                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                        SetExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(Self::reduce_table_2d_set_y(
-                        op,
-                        &tables.tables_2d[*i],
-                        x.into_iter(),
-                        &y,
-                    )),
-                    (x, y) => Self::Table2DVectorSetReduce(op.clone(), *i, x, y),
                 }
             }
             Self::Table2DReduceX(op, i, x, y) => match (x.simplify(registry), y.simplify(registry))
@@ -589,34 +632,6 @@ impl<T: Numeric> NumericTableExpression<T> {
                 )),
                 (x, y) => Self::Table2DReduceY(op.clone(), *i, x, y),
             },
-            Self::Table2DVectorReduceX(op, i, x, y) => {
-                match (x.simplify(registry), y.simplify(registry)) {
-                    (
-                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                        ElementExpression::Constant(y),
-                    ) => Self::Constant(Self::reduce_table_2d_x(
-                        op,
-                        &tables.tables_2d[*i],
-                        x.into_iter(),
-                        y,
-                    )),
-                    (x, y) => Self::Table2DVectorReduceX(op.clone(), *i, x, y),
-                }
-            }
-            Self::Table2DVectorReduceY(op, i, x, y) => {
-                match (x.simplify(registry), y.simplify(registry)) {
-                    (
-                        ElementExpression::Constant(x),
-                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(Self::reduce_table_2d_y(
-                        op,
-                        &tables.tables_2d[*i],
-                        x,
-                        y.into_iter(),
-                    )),
-                    (x, y) => Self::Table2DVectorReduceY(op.clone(), *i, x, y),
-                }
-            }
             Self::Table3DReduce(op, i, x, y, z) => {
                 let x = x.simplify(registry);
                 let y = y.simplify(registry);
@@ -643,16 +658,6 @@ impl<T: Numeric> NumericTableExpression<T> {
         I: Iterator<Item = Element>,
     {
         op.eval_iter(x.map(|x| table.eval(x))).unwrap()
-    }
-
-    fn reduce_table_2d<I, J>(op: &ReduceOperator, table: &Table2D<T>, x: I, y: J) -> T
-    where
-        T: Num + PartialOrd + Sum + Product,
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        op.eval_iter(x.map(|x| op.eval_iter(y.clone().map(|y| table.eval(x, y))).unwrap()))
-            .unwrap()
     }
 
     fn reduce_table_2d_set_x<I>(op: &ReduceOperator, table: &Table2D<T>, x: &Set, y: I) -> T
@@ -697,6 +702,7 @@ mod tests {
     use crate::state::*;
     use crate::table;
     use crate::table_data::TableInterface;
+    use crate::variable_type::Integer;
     use rustc_hash::FxHashMap;
 
     fn generate_registry() -> TableRegistry {
@@ -762,7 +768,6 @@ mod tests {
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2, Set::with_capacity(3), Set::with_capacity(3)],
-                vector_variables: vec![vec![0, 2], vec![0, 1], vec![], vec![]],
                 ..Default::default()
             },
             ..Default::default()
@@ -774,12 +779,14 @@ mod tests {
         let registry = generate_registry();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let state = generate_state();
         let expression = NumericTableExpression::Constant(10);
         assert_eq!(
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -794,11 +801,13 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Constant(0));
         assert_eq!(
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -810,6 +819,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -821,6 +831,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -835,6 +846,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table1DReduce(
             ReduceOperator::Sum,
             0,
@@ -844,6 +856,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -859,6 +872,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -876,51 +890,12 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
             ),
             20
-        );
-    }
-
-    #[test]
-    fn table_1d_vector_sum_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let expression = NumericTableExpression::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            40
-        );
-        let expression = NumericTableExpression::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            40
         );
     }
 
@@ -958,6 +933,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -972,6 +948,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table2D(
             0,
             ElementExpression::Constant(0),
@@ -981,6 +958,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -995,6 +973,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
 
         let expression = NumericTableExpression::Table2DReduce(
             ReduceOperator::Sum,
@@ -1006,6 +985,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1025,6 +1005,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1044,6 +1025,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1065,258 +1047,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_sum_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(1),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(1),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-    }
-
-    #[test]
-    fn table_2d_set_vector_sum_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(1),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(1),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_set_sum_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(1)),
-            )))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            180
-        );
-
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(1)),
-            )))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1331,6 +1062,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
 
         let expression = NumericTableExpression::Table2DReduceX(
             ReduceOperator::Sum,
@@ -1342,6 +1074,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1361,50 +1094,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            80
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_sum_x_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let expression = NumericTableExpression::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            80
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1419,6 +1109,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
 
         let expression = NumericTableExpression::Table2DReduceY(
             ReduceOperator::Sum,
@@ -1430,6 +1121,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1449,50 +1141,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            40
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_sum_y_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let expression = NumericTableExpression::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry,
-                &registry.integer_tables
-            ),
-            40
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(
-                &state,
-                &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1536,6 +1185,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -1579,6 +1229,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -1624,6 +1275,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -1671,6 +1323,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -1718,6 +1371,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut StateFunctionCache::new(&state_functions),
+                &mut LocalEnvironment::default(),
                 &state_functions,
                 &registry,
                 &registry.integer_tables,
@@ -1732,6 +1386,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table3D(
             0,
             ElementExpression::Constant(0),
@@ -1742,6 +1397,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1756,19 +1412,19 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table3DReduce(
             ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
         assert_eq!(
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1783,6 +1439,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::Table(
             0,
             vec![
@@ -1796,6 +1453,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1815,6 +1473,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1834,6 +1493,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1853,6 +1513,7 @@ mod tests {
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1867,6 +1528,7 @@ mod tests {
         let state = generate_state();
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
+        let mut local_environment = LocalEnvironment::default();
         let expression = NumericTableExpression::TableReduce(
             ReduceOperator::Sum,
             0,
@@ -1878,15 +1540,14 @@ mod tests {
                         ReferenceExpression::Variable(0),
                     ))),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
-                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
-                ))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
             ],
         );
         assert_eq!(
             expression.eval(
                 &state,
                 &mut function_cache,
+                &mut local_environment,
                 &state_functions,
                 &registry,
                 &registry.integer_tables
@@ -1951,31 +1612,6 @@ mod tests {
     }
 
     #[test]
-    fn table_1d_vector_sum_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(30)
-        );
-
-        let expression = NumericTableExpression::Table1DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
     fn table_2d_simplify() {
         let registry = generate_registry();
 
@@ -2023,93 +1659,6 @@ mod tests {
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_sum_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(120)
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_2d_set_vector_sum_simplify() {
-        let registry = generate_registry();
-
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(1);
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Constant(set)),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(120)
-        );
-
-        let expression = NumericTableExpression::Table2DSetVectorReduce(
-            ReduceOperator::Sum,
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_set_sum_simplify() {
-        let registry = generate_registry();
-
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(1);
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            SetExpression::Reference(ReferenceExpression::Constant(set)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(120)
-        );
-
-        let expression = NumericTableExpression::Table2DVectorSetReduce(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(1)),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
@@ -2178,60 +1727,6 @@ mod tests {
     }
 
     #[test]
-    fn table_2d_vector_sum_x_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(50)
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduceX(
-            ReduceOperator::Sum,
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_sum_y_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(30)
-        );
-
-        let expression = NumericTableExpression::Table2DVectorReduceY(
-            ReduceOperator::Sum,
-            0,
-            ElementExpression::Constant(0),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
     fn table_3d_simplify() {
         let registry = generate_registry();
 
@@ -2270,9 +1765,12 @@ mod tests {
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(set))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(3);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
@@ -2284,9 +1782,7 @@ mod tests {
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
@@ -2345,9 +1841,12 @@ mod tests {
                         ReferenceExpression::Constant(set),
                     ))),
                 ))),
-                ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
-                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
-                ))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
             ],
         );
         assert_eq!(
@@ -2362,14 +1861,80 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Variable(0),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ],
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
             expression
         );
+    }
+
+    #[test]
+    fn reduce_direct_table_lookup() {
+        let set = SetExpression::Reference(ReferenceExpression::Variable(0));
+        let x = ElementExpression::LocalVariable(1);
+        let op = ReduceOperator::Sum;
+
+        let expression = NumericTableExpression::<Integer>::Table1D(2, x.clone());
+        assert_eq!(
+            expression.reduce(&op, &set, 1),
+            Some(NumericTableExpression::Table1DReduce(
+                op.clone(),
+                2,
+                set.clone(),
+            ))
+        );
+
+        let expression = NumericTableExpression::<Integer>::Table2D(
+            3,
+            ElementExpression::Constant(0),
+            x.clone(),
+        );
+        assert_eq!(
+            expression.reduce(&op, &set, 1),
+            Some(NumericTableExpression::Table2DReduceY(
+                op.clone(),
+                3,
+                ElementExpression::Constant(0),
+                set.clone(),
+            ))
+        );
+
+        let expression = NumericTableExpression::<Integer>::Table3D(
+            4,
+            ElementExpression::Constant(0),
+            x.clone(),
+            ElementExpression::Constant(2),
+        );
+        assert_eq!(
+            expression.reduce(&op, &set, 1),
+            Some(NumericTableExpression::Table3DReduce(
+                op.clone(),
+                4,
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(set.clone()),
+                ArgumentExpression::Element(ElementExpression::Constant(2)),
+            ))
+        );
+
+        let expression = NumericTableExpression::<Integer>::Table(
+            5,
+            vec![ElementExpression::Constant(0), x.clone()],
+        );
+        assert_eq!(
+            expression.reduce(&op, &set, 1),
+            Some(NumericTableExpression::TableReduce(
+                op.clone(),
+                5,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(set.clone()),
+                ],
+            ))
+        );
+
+        let expression = NumericTableExpression::<Integer>::Table2D(6, x.clone(), x);
+        assert_eq!(expression.reduce(&op, &set, 1), None);
     }
 }

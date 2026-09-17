@@ -1,5 +1,6 @@
 //! A module for modeling.
 mod expression;
+mod solution;
 mod state;
 mod table;
 mod transition;
@@ -11,6 +12,7 @@ pub use expression::*;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use rustc_hash::FxHashMap;
+pub use solution::ValidationError;
 pub use state::StatePy;
 use std::collections::HashSet;
 use std::fs;
@@ -19,7 +21,7 @@ pub use transition::{CostUnion, IntOrFloat, TransitionPy};
 
 /// Object type.
 /// This class is used to define :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, and :class:`SetConst`.
-#[pyclass(name = "ObjectType")]
+#[pyclass(name = "ObjectType", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectTypePy(ObjectType);
 
@@ -32,6 +34,23 @@ impl From<ObjectTypePy> for ObjectType {
 impl From<ObjectType> for ObjectTypePy {
     fn from(ob: ObjectType) -> Self {
         Self(ob)
+    }
+}
+
+/// Local variable.
+#[pyclass(name = "LocalVar", from_py_object)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalVarPy(LocalVariable);
+
+impl From<LocalVarPy> for LocalVariable {
+    fn from(var: LocalVarPy) -> Self {
+        var.0
+    }
+}
+
+impl From<LocalVariable> for LocalVarPy {
+    fn from(var: LocalVariable) -> Self {
+        Self(var)
     }
 }
 
@@ -49,70 +68,6 @@ pub enum TargetSetArgUnion {
     SetConst(SetConstPy),
     #[pyo3(transparent)]
     CreateSetArg(CreateSetArgUnion),
-}
-
-#[derive(FromPyObject, Debug, PartialEq, Clone)]
-pub enum TargetArgUnion {
-    #[pyo3(transparent, annotation = "unsigned int")]
-    Element(Element),
-    #[pyo3(transparent, annotation = "int")]
-    Int(Integer),
-    #[pyo3(transparent, annotation = "float")]
-    Float(Continuous),
-    #[pyo3(transparent)]
-    Set(TargetSetArgUnion),
-}
-
-#[derive(FromPyObject, Debug, Clone, PartialEq, Eq)]
-pub enum TableIndexUnion {
-    #[pyo3(transparent, annotation = "unsigned int")]
-    Table1D(Element),
-    #[pyo3(transparent, annotation = "tuple[unsigned int, unsigned int]")]
-    Table2D((Element, Element)),
-    #[pyo3(
-        transparent,
-        annotation = "tuple[unsigned int, unsigned int, unsigned int]"
-    )]
-    Table3D((Element, Element, Element)),
-    #[pyo3(transparent, annotation = "Sequence[unsigned int]")]
-    Table(Vec<Element>),
-}
-
-#[derive(FromPyObject, Debug, Clone, PartialEq)]
-pub enum TableArgUnion {
-    Element(ElementTableArgUnion),
-    Set(SetTableArgUnion),
-    Bool(BoolTableArgUnion),
-    Int(IntTableArgUnion),
-    Float(FloatTableArgUnion),
-}
-
-#[derive(FromPyObject, Debug, Clone, PartialEq)]
-pub enum TableUnion {
-    #[pyo3(transparent)]
-    Element(ElementTableUnion),
-    #[pyo3(transparent)]
-    Set(SetTableUnion),
-    #[pyo3(transparent)]
-    Bool(BoolTableUnion),
-    #[pyo3(transparent)]
-    Int(IntTableUnion),
-    #[pyo3(transparent)]
-    Float(FloatTableUnion),
-}
-
-#[derive(FromPyObject, Debug, Clone, PartialEq)]
-pub enum SetDefaultArgUnion {
-    #[pyo3(transparent)]
-    Element(ElementTablePy),
-    #[pyo3(transparent)]
-    Set(SetTablePy),
-    #[pyo3(transparent)]
-    Bool(BoolTablePy),
-    #[pyo3(transparent)]
-    Int(IntTablePy),
-    #[pyo3(transparent)]
-    Float(FloatTablePy),
 }
 
 #[derive(FromPyObject, Debug, Clone, PartialEq, Eq)]
@@ -247,7 +202,7 @@ pub enum FloatTableUnion {
     Table(FloatTablePy),
 }
 
-#[pyclass(name = "TransitionId")]
+#[pyclass(name = "TransitionId", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TransitionIdPy(TransitionId);
 
@@ -284,7 +239,7 @@ pub struct TransitionIdPy(TransitionId);
 /// >>> model.target_state = state
 /// >>> model.target_state[var]
 /// 5
-#[pyclass(name = "Model")]
+#[pyclass(name = "Model", from_py_object)]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ModelPy(Model);
 
@@ -481,6 +436,167 @@ impl ModelPy {
         let problem_str = fs::read_to_string(problem_path)?;
 
         Self::load_from_str(&domain_str, &problem_str)
+    }
+
+    /// Loads a candidate solution from YAML text using this model.
+    ///
+    /// The document must contain a ``transitions`` list with transition ``name``
+    /// and optional ``parameters`` mappings. These must uniquely identify this
+    /// model's transitions. The optional ``cost`` is retained as a declared cost;
+    /// loading does not establish feasibility.
+    ///
+    /// Parameters
+    /// ----------
+    /// solution_str: str
+    ///     Exactly one YAML document in the didp-yaml solution format.
+    ///
+    /// Returns
+    /// -------
+    /// tuple[list[Transition], int | float | None]
+    ///     A pair (transitions, declared_cost). The first item is always a list;
+    ///     the second is None if cost is omitted or null in the YAML. Otherwise,
+    ///     the declared cost is an int for an integer-cost model and a float for
+    ///     a continuous-cost model. Loading does not compute or compare costs.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the YAML, declared cost, or transition references are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> model.load_solution_from_str("transitions: []")
+    /// ([], None)
+    /// >>> model.load_solution_from_str("{cost: 0, transitions: []}")
+    /// ([], 0)
+    fn load_solution_from_str(
+        &self,
+        solution_str: &str,
+    ) -> PyResult<(Vec<TransitionPy>, Option<IntOrFloat>)> {
+        solution::load_from_str(self, solution_str)
+    }
+
+    /// Loads a candidate solution from a YAML file using this model.
+    ///
+    /// See :meth:`load_solution_from_str` for the format and loading behavior.
+    /// Pass the returned transitions to :meth:`validate_solution` to check
+    /// feasibility and compute the cost. Compare the declared cost separately
+    /// using :meth:`validate_cost` if it is not None.
+    ///
+    /// Parameters
+    /// ----------
+    /// solution_path: str or os.PathLike
+    ///     Solution file path.
+    ///
+    /// Returns
+    /// -------
+    /// tuple[list[Transition], int | float | None]
+    ///     A pair (transitions, declared_cost), as in :meth:`load_solution_from_str`.
+    ///
+    /// Raises
+    /// ------
+    /// OSError
+    ///     If the file cannot be read.
+    /// ValueError
+    ///     If the YAML, declared cost, or transition references are invalid.
+    fn load_solution_from_file(
+        &self,
+        solution_path: std::path::PathBuf,
+    ) -> PyResult<(Vec<TransitionPy>, Option<IntOrFloat>)> {
+        self.load_solution_from_str(&fs::read_to_string(solution_path)?)
+    }
+
+    /// Returns a YAML string representing a candidate solution.
+    ///
+    /// Serializes transition names and parameter maps, not their definitions.
+    /// For transition objects, membership is not checked; reloading requires
+    /// their references to uniquely identify transitions in the supplied model.
+    /// IDs are resolved against this model, just as in :meth:`get_transition`.
+    /// No feasibility checks, expression evaluation, or cost comparison is done.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or IDs in solution order. All entries must have the same
+    ///     type. For a solver result, pass :code:`solution.transitions`.
+    /// cost: int or float or None, default: None
+    ///     Declared cost to serialize, without computing or checking its value.
+    ///     Must match the model's cost type and be finite. None writes YAML null;
+    ///     no objective is computed when the cost is omitted.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     YAML in the format accepted by :meth:`load_solution_from_str` and
+    ///     didp-yaml-validator, with a required transitions list and optional cost.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If transitions is not a homogeneous sequence of transitions or IDs,
+    ///     or cost has the wrong type for the model.
+    /// ValueError
+    ///     If an ID is backward or out of range, cost is non-finite, or the
+    ///     candidate cannot be serialized.
+    /// OverflowError
+    ///     If an integer cost is outside the 32-bit integer range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> step = dp.Transition(name="step")
+    /// >>> step_id = model.add_transition(step)
+    /// >>> text = model.dump_solution_to_str([step_id], cost=2)
+    /// >>> transitions, cost = model.load_solution_from_str(text)
+    /// >>> [t.name for t in transitions], cost
+    /// (['step'], 2)
+    /// >>> text = model.dump_solution_to_str([step])
+    /// >>> transitions, cost = model.load_solution_from_str(text)
+    /// >>> cost is None
+    /// True
+    #[pyo3(signature = (transitions, cost = None))]
+    fn dump_solution_to_str(
+        &self,
+        transitions: solution::SolutionTransitions,
+        cost: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        solution::dump_to_str(self, transitions, cost)
+    }
+
+    /// Writes a candidate solution to a YAML file, overwriting it if it exists.
+    ///
+    /// See :meth:`dump_solution_to_str` for the format and serialization behavior.
+    /// Input is serialized before the file is opened. No feasibility checks or
+    /// cost computation or comparison is done.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or IDs in solution order, all of the same type.
+    /// solution_path: str or os.PathLike
+    ///     Output file path. Its parent directory must already exist.
+    /// cost: int or float or None, default: None
+    ///     Declared cost to serialize. None writes YAML null.
+    ///
+    /// Raises
+    /// ------
+    /// OSError
+    ///     If the file cannot be written.
+    /// TypeError, ValueError, OverflowError
+    ///     If an input cannot be serialized; see :meth:`dump_solution_to_str`.
+    #[pyo3(signature = (transitions, solution_path, cost = None))]
+    fn dump_solution_to_file(
+        &self,
+        transitions: solution::SolutionTransitions,
+        solution_path: std::path::PathBuf,
+        cost: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let yaml = self.dump_solution_to_str(transitions, cost)?;
+        fs::write(solution_path, yaml)?;
+        Ok(())
     }
 
     /// Gets the object type by a name.
@@ -939,6 +1055,104 @@ impl ModelPy {
         }
     }
 
+    /// get_set_resource_var(name)
+    ///
+    /// Gets a set resource variable by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a variable.
+    ///
+    /// Returns
+    /// -------
+    /// SetResourceVar
+    ///     The variable.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such variable.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.add_set_resource_var(object_type=obj, target=[1, 2, 3], less_is_better=True, name="var")
+    /// >>> var = model.get_set_resource_var("var")
+    /// >>> var.contains(1).eval(model.target_state, model)
+    /// True
+    fn get_set_resource_var(&self, name: &str) -> PyResult<SetResourceVarPy> {
+        match self.0.get_set_resource_variable(name) {
+            Ok(var) => Ok(SetResourceVarPy::from(var)),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_set_resource_var(object_type, target, less_is_better, name)
+    ///
+    /// Adds a set resource variable to the model.
+    ///
+    /// Parameters
+    /// ----------
+    /// object_type: ObjectType
+    ///     Object type associated with the variable.
+    /// target: SetConst, list of int, or set of int
+    ///     Value of the variable in the target state.
+    /// less_is_better: bool, default: False
+    ///     Prefer a subset or not.
+    /// name: str or None, default: None
+    ///     Name of the variable.
+    ///     If None, :code:`__set_resource_var_{id}` is used where :code:`{id}` is the id of the variable.
+    ///
+    /// Returns
+    /// -------
+    /// SetResourceVar
+    ///     The variable.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`object_type` is not included in the model.
+    ///     If a value in :code:`target` is greater than or equal to the number of the objects.
+    ///     If :code:`name` is already used.
+    /// TypeError
+    ///     If a value in :code:`target` is negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_resource_var(object_type=obj, target=[1, 2, 3], less_is_better=True)
+    /// >>> var.contains(1).eval(model.target_state, model)
+    /// True
+    #[pyo3(signature = (object_type, target, less_is_better = false, name = None))]
+    fn add_set_resource_var(
+        &mut self,
+        object_type: ObjectTypePy,
+        target: TargetSetArgUnion,
+        less_is_better: bool,
+        name: Option<&str>,
+    ) -> PyResult<SetResourceVarPy> {
+        let target = self.convert_target_set_arg(Some(object_type), target)?;
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_metadata.number_of_set_resource_variables();
+                format!("__set_resource_var_{n}")
+            },
+            String::from,
+        );
+        match self
+            .0
+            .add_set_resource_variable(name, object_type.into(), less_is_better, target)
+        {
+            Ok(var) => Ok(SetResourceVarPy::from(var)),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
     /// Gets an integer variable by a name.
     ///
     /// Parameters
@@ -1296,6 +1510,9 @@ impl ModelPy {
                 .0
                 .get_object_type_of(ElementResourceVariable::from(var)),
             ObjectVarUnion::Set(var) => self.0.get_object_type_of(SetVariable::from(var)),
+            ObjectVarUnion::SetResource(var) => {
+                self.0.get_object_type_of(SetResourceVariable::from(var))
+            }
         };
         match result {
             Ok(ob) => Ok(ObjectTypePy(ob)),
@@ -1343,6 +1560,12 @@ impl ModelPy {
                 }
             }
             VarUnion::Set(var) => match self.0.get_target(SetVariable::from(var)) {
+                Ok(value) => Ok(state::VariableValueUnion::Set(HashSet::from_iter(
+                    value.ones(),
+                ))),
+                Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+            },
+            VarUnion::SetResource(var) => match self.0.get_target(SetResourceVariable::from(var)) {
                 Ok(value) => Ok(state::VariableValueUnion::Set(HashSet::from_iter(
                     value.ones(),
                 ))),
@@ -1442,6 +1665,17 @@ impl ModelPy {
                 .into();
                 self.0.set_target(SetVariable::from(var), target)
             }
+            VarUnion::SetResource(var) => {
+                let target = match target.extract()? {
+                    TargetSetArgUnion::SetConst(target) => target,
+                    TargetSetArgUnion::CreateSetArg(target) => {
+                        let ob = self.get_object_type_of(ObjectVarUnion::SetResource(var))?;
+                        self.create_set_const(ob, target)?
+                    }
+                }
+                .into();
+                self.0.set_target(SetResourceVariable::from(var), target)
+            }
         };
         match result {
             Ok(_) => Ok(()),
@@ -1478,6 +1712,7 @@ impl ModelPy {
             ResourceVarUnion::Element(var) => {
                 self.0.get_preference(ElementResourceVariable::from(var))
             }
+            ResourceVarUnion::Set(var) => self.0.get_preference(SetResourceVariable::from(var)),
             ResourceVarUnion::Int(var) => self.0.get_preference(IntegerResourceVariable::from(var)),
             ResourceVarUnion::Float(var) => {
                 self.0.get_preference(ContinuousResourceVariable::from(var))
@@ -1516,6 +1751,9 @@ impl ModelPy {
             ResourceVarUnion::Element(var) => self
                 .0
                 .set_preference(ElementResourceVariable::from(var), less_is_better),
+            ResourceVarUnion::Set(var) => self
+                .0
+                .set_preference(SetResourceVariable::from(var), less_is_better),
             ResourceVarUnion::Int(var) => self
                 .0
                 .set_preference(IntegerResourceVariable::from(var), less_is_better),
@@ -1945,6 +2183,84 @@ impl ModelPy {
         }
     }
 
+    /// Gets a local variable by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a variable.
+    ///
+    /// Returns
+    /// -------
+    /// LocalVar
+    ///    The variable.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///    If no such variable.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> set = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    /// >>> model.add_local_var("x")
+    /// >>> x = model.get_local_var("x")
+    /// >>> expr = set.filter(x, x > 1)
+    /// >>> expr.eval(model.target_state, model)
+    /// {2, 3}
+    fn get_local_var(&self, name: &str) -> PyResult<LocalVarPy> {
+        match self.0.get_local_variable(name) {
+            Ok(var) => Ok(LocalVarPy::from(var)),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// Adds a local variable.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str or None, default: None
+    ///    Name of the variable.
+    ///    If None, :code:`__local_var_{id}` is used where :code:`{id}` is the id of the variable.
+    ///
+    /// Returns
+    /// -------
+    /// LocalVar
+    ///     The variable.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> set = model.add_set_var(object_type=obj, target=[0, 1, 2, 3])
+    /// >>> x = model.add_local_var()
+    /// >>> expr = set.filter(x, x > 1)
+    /// >>> expr.eval(model.target_state, model)
+    /// {2, 3}
+    #[pyo3(signature = (name = None))]
+    fn add_local_var(&mut self, name: Option<&str>) -> PyResult<LocalVarPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.local_variable_data.number_of_variables();
+                format!("__local_var_{n}")
+            },
+            String::from,
+        );
+        match self.0.add_local_variable(name) {
+            Ok(var) => Ok(LocalVarPy::from(var)),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
     /// list of Condition : State constraints.   
     #[getter]
     fn state_constrs(&self) -> Vec<ConditionPy> {
@@ -2261,12 +2577,12 @@ impl ModelPy {
         }
     }
 
-    /// Gets a transition by an ID.
+    /// Gets a transition by its id.
     ///
     /// Parameters
     /// ----------
     /// id: TransitionId
-    ///    ID of the transition.
+    ///     ID of the transition.
     ///
     /// Returns
     /// -------
@@ -2276,25 +2592,24 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the transition does not
+    ///     If the transition does not exist.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> t = dp.Transition(name="t", cost=1 + dp.IntExpr.state_cost())
-    /// >>> id = model.add_transition(t)
+    /// >>> id = model.add_transition(dp.Transition(name="t"))
     /// >>> t = model.get_transition(id)
     /// >>> t.name
     /// 't'
     fn get_transition(&self, id: &TransitionIdPy) -> PyResult<TransitionPy> {
         self.0
             .get_transition(&id.0)
-            .map(|t| TransitionPy::from(t.clone()))
+            .map(|transition| TransitionPy::from(transition.clone()))
             .map_err(|err| PyRuntimeError::new_err(err.to_string()))
     }
 
-    /// Adds a transition dominance.
+    /// Adds a transition dominance relation.
     ///
     /// Parameters
     /// ----------
@@ -2302,14 +2617,13 @@ impl ModelPy {
     ///     ID of the dominating transition.
     /// dominated: TransitionId
     ///     ID of the dominated transition.
-    /// conditions: list of Condition or None
-    ///     Conditions to dominate the transition.
-    ///     If `None`, the dominated transition is always dominated by the dominating transition.
+    /// conditions: list of Condition or None, default: None
+    ///     Conditions under which the dominance holds.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If the dominating or dominated transition is forced or does not exist, or conditions are invalid.
+    ///     If either transition does not exist or the dominance relation is invalid.
     ///
     /// Examples
     /// --------
@@ -2322,7 +2636,7 @@ impl ModelPy {
     /// >>> id2 = model.add_transition(t2)
     /// >>> model.add_transition_dominance(id1, id2, conditions=[var >= 0])
     /// >>> model.is_transition_dominated(model.target_state, id2)
-    /// true
+    /// True
     #[pyo3(signature = (dominating, dominated, conditions = None))]
     fn add_transition_dominance(
         &mut self,
@@ -2330,31 +2644,30 @@ impl ModelPy {
         dominated: &TransitionIdPy,
         conditions: Option<Vec<ConditionPy>>,
     ) -> PyResult<()> {
-        if let Some(conditions) = conditions {
-            let conditions = conditions.into_iter().map(|x| x.into()).collect();
+        let result = if let Some(conditions) = conditions {
+            let conditions = conditions.into_iter().map(Condition::from).collect();
             self.0
                 .add_transition_dominance_with_conditions(&dominating.0, &dominated.0, conditions)
-                .map_err(|err| PyRuntimeError::new_err(err.to_string()))
         } else {
-            self.0
-                .add_transition_dominance(&dominating.0, &dominated.0)
-                .map_err(|err| PyRuntimeError::new_err(err.to_string()))
-        }
+            self.0.add_transition_dominance(&dominating.0, &dominated.0)
+        };
+
+        result.map_err(|err| PyRuntimeError::new_err(err.to_string()))
     }
 
-    /// Checks if the transition is dominated by another transition in a given state.
+    /// Checks whether a transition is dominated in a state.
     ///
     /// Parameters
     /// ----------
     /// state: State
-    ///    State to be checked.
+    ///     State to check.
     /// id: TransitionId
-    ///   ID of the transition to be checked.
+    ///     ID of the transition.
     ///
     /// Returns
     /// -------
     /// bool
-    ///     True if the transition is dominated by another transition in the state.
+    ///     True if the transition is dominated or inapplicable.
     ///
     /// Raises
     /// ------
@@ -2372,9 +2685,9 @@ impl ModelPy {
     /// >>> id2 = model.add_transition(t2)
     /// >>> model.add_transition_dominance(id1, id2, conditions=[var >= 0])
     /// >>> model.is_transition_dominated(model.target_state, id2)
-    /// true
+    /// True
     fn is_transition_dominated(
-        &mut self,
+        &self,
         state: &state::StatePy,
         id: &TransitionIdPy,
     ) -> PyResult<bool> {
@@ -2476,6 +2789,10 @@ impl ModelPy {
 
     /// Validates a solution consists of forward transitions.
     ///
+    /// Legacy interface. Prefer :meth:`validate_solution` for computed costs and
+    /// exception-based diagnostics. This method accepts unregistered transitions,
+    /// does not check target-state constraints, and only warns about cost mismatches.
+    ///
     /// Parameters
     /// ----------
     /// transitions: list of Transition
@@ -2531,6 +2848,124 @@ impl ModelPy {
             let cost: Integer = cost.extract()?;
             Ok(self.0.validate_forward(&transitions, cost, !quiet))
         }
+    }
+
+    /// Validates a solution and returns its computed objective value.
+    ///
+    /// Checks that the transitions belong to this model, are applicable, satisfy
+    /// state constraints (including at the target), and end at the first base
+    /// state. Original transition objects are accepted after model simplification.
+    /// All transition memberships or IDs are checked in sequence order before
+    /// checking feasibility. An invalid reference is reported even if an earlier
+    /// transition would fail a feasibility check.
+    /// Costs are evaluated backwards from the base cost using the model's cost
+    /// expressions. Forced-transition priority, dominance, bounds, and optimality
+    /// are not checked.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or their IDs in forward order. All entries must be of the
+    ///     same type. IDs resolve directly to registered transitions in this model.
+    ///     IDs do not track model ownership: an ID from another model is interpreted
+    ///     using its index and flags in this model. For a :class:`Solution`,
+    ///     pass :code:`solution.transitions`. No declared cost is compared; use
+    ///     :meth:`validate_cost` separately if needed.
+    ///
+    /// Returns
+    /// -------
+    /// int or float
+    ///     Independently computed objective value, according to model.float_cost.
+    ///
+    /// Raises
+    /// ------
+    /// ValidationError
+    ///     If a transition is unregistered, an ID is out of range,
+    ///     the solution is infeasible, expression
+    ///     evaluation fails, or a cost is non-finite.
+    ///     Evaluation panics become ValidationError, but Rust's panic hook may
+    ///     still write a diagnostic to stderr.
+    /// TypeError
+    ///     If the argument is not a homogeneous sequence of transitions or IDs.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> step = dp.Transition(name="step", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+    /// >>> step_id = model.add_transition(step)
+    /// >>> model.validate_solution([step])
+    /// 1
+    /// >>> model.validate_solution([step_id])
+    /// 1
+    /// >>> transitions, declared_cost = model.load_solution_from_str("{cost: 1, transitions: [{name: step}]}")
+    /// >>> cost = model.validate_solution(transitions)
+    /// >>> cost
+    /// 1
+    /// >>> model.validate_cost(cost, declared_cost)
+    fn validate_solution(
+        &self,
+        transitions: solution::SolutionTransitions,
+    ) -> PyResult<IntOrFloat> {
+        solution::validate(self, transitions)
+    }
+
+    /// Compares a computed objective value with a declared cost.
+    ///
+    /// This method only compares numbers; it does not validate feasibility or
+    /// evaluate transitions. Use :meth:`validate_solution` to compute the cost.
+    /// Integer costs are always compared exactly. Continuous costs must be finite
+    /// and their absolute difference must be at most
+    /// max(abs_tol, rel_tol * max(abs(declared_cost), abs(computed_cost))).
+    ///
+    /// Parameters
+    /// ----------
+    /// computed_cost: int or float
+    ///     Independently computed objective value.
+    /// declared_cost: int or float
+    ///     Cost to check against the computed value. If loading returned
+    ///     :code:`declared_cost=None`, skip this call.
+    /// rel_tol: float, default: 0.0
+    ///     Non-negative finite relative tolerance for continuous cost comparison.
+    /// abs_tol: float, default: 0.0
+    ///     Non-negative finite absolute tolerance for continuous cost comparison.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     If the costs match.
+    ///
+    /// Raises
+    /// ------
+    /// ValidationError
+    ///     If the costs do not match or either cost is non-finite.
+    /// ValueError
+    ///     If a tolerance is negative or non-finite.
+    /// TypeError
+    ///     If either cost has the wrong type for the model.
+    /// OverflowError
+    ///     If an integer cost is outside the 32-bit integer range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model(float_cost=True)
+    /// >>> model.validate_cost(0.1 + 0.2, 0.3, rel_tol=1e-9)
+    /// >>> model.validate_cost(2.0, 3.0)
+    /// Traceback (most recent call last):
+    ///     ...
+    /// didppy.ValidationError: The declared cost 3 does not match the computed cost 2.
+    #[pyo3(signature = (computed_cost, declared_cost, *, rel_tol = 0.0, abs_tol = 0.0))]
+    fn validate_cost(
+        &self,
+        computed_cost: Bound<'_, PyAny>,
+        declared_cost: Bound<'_, PyAny>,
+        rel_tol: f64,
+        abs_tol: f64,
+    ) -> PyResult<()> {
+        solution::validate_cost(self, computed_cost, declared_cost, rel_tol, abs_tol)
     }
 
     /// Adds a table of element constants.
@@ -3406,8 +3841,7 @@ impl ModelPy {
     //             for i in hash_set {
     //                 if i >= capacity {
     //                     return Err(PyRuntimeError::new_err(format!(
-    //                         "value `{}` >= capacity :code:`{capacity} of a set`",
-    //                         i, capacity
+    //                         "value `{i}` >= capacity :code:`{capacity} of a set`",
     //                     )));
     //                 }
     //                 set.insert(i);
@@ -4344,7 +4778,7 @@ mod tests {
 
     #[test]
     fn set_element_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4354,7 +4788,7 @@ mod tests {
         let v = model.add_element_var(ob, 0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4368,7 +4802,7 @@ mod tests {
 
     #[test]
     fn set_element_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4379,7 +4813,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4391,7 +4825,7 @@ mod tests {
 
     #[test]
     fn set_element_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4403,7 +4837,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4543,7 +4977,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4553,7 +4987,7 @@ mod tests {
         let v = model.add_element_resource_var(ob, 0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4567,7 +5001,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4578,7 +5012,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4590,7 +5024,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4602,7 +5036,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5046,7 +5480,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_list_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5057,7 +5491,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5074,7 +5508,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_list_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5086,7 +5520,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize, 10usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5098,7 +5532,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5109,7 +5543,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = {
                 let mut set = HashSet::<Element>::default();
                 set.insert(3);
@@ -5133,7 +5567,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5145,7 +5579,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = {
                 let mut set = HashSet::<Element>::default();
                 set.insert(3);
@@ -5165,7 +5599,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_const_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5176,7 +5610,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
@@ -5200,7 +5634,7 @@ mod tests {
 
     #[test]
     fn set_set_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5212,7 +5646,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5224,7 +5658,7 @@ mod tests {
 
     #[test]
     fn set_set_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5237,7 +5671,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5342,13 +5776,13 @@ mod tests {
 
     #[test]
     fn set_int_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5362,14 +5796,14 @@ mod tests {
 
     #[test]
     fn set_int_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5381,7 +5815,7 @@ mod tests {
 
     #[test]
     fn set_int_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
@@ -5389,7 +5823,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5490,13 +5924,13 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5510,14 +5944,14 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5529,7 +5963,7 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
@@ -5537,7 +5971,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5665,13 +6099,13 @@ mod tests {
 
     #[test]
     fn set_float_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5685,14 +6119,14 @@ mod tests {
 
     #[test]
     fn set_float_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = (0, 1).into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5704,7 +6138,7 @@ mod tests {
 
     #[test]
     fn set_float_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
@@ -5712,7 +6146,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5813,13 +6247,13 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5833,14 +6267,14 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = (0, 1).into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5852,7 +6286,7 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
@@ -5860,7 +6294,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -6269,14 +6703,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_1d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6286,7 +6720,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_1d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6294,7 +6728,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6305,7 +6739,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_1d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6313,7 +6747,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6324,7 +6758,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_1d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6333,7 +6767,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6344,14 +6778,14 @@ mod tests {
 
     // #[test]
     // fn update_element_table_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2usize].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6360,7 +6794,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_1d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6368,7 +6802,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6378,7 +6812,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_1d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6386,7 +6820,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6396,7 +6830,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_1d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table1D(vec![1]);
@@ -6405,7 +6839,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2usize].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6465,14 +6899,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_2d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6482,7 +6916,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_2d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6490,7 +6924,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6501,7 +6935,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_2d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6509,7 +6943,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6520,7 +6954,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_2d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6529,7 +6963,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6540,14 +6974,14 @@ mod tests {
 
     // #[test]
     // fn update_element_table_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6556,7 +6990,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_2d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6564,7 +6998,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6574,7 +7008,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_2d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6582,7 +7016,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6592,7 +7026,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_2d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table2D(vec![vec![1]]);
@@ -6601,7 +7035,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6661,14 +7095,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_3d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6678,7 +7112,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_3d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6686,7 +7120,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6697,7 +7131,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_3d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6705,7 +7139,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6716,7 +7150,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_3d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6725,7 +7159,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6736,14 +7170,14 @@ mod tests {
 
     // #[test]
     // fn update_element_table_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
     //     let t = model.add_element_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6752,7 +7186,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_3d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6760,7 +7194,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6770,7 +7204,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_3d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6778,7 +7212,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6788,7 +7222,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_3d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -6797,7 +7231,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Element(t), value, None)
     //     });
@@ -6866,14 +7300,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_element_table(table, Some(1usize), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6892,14 +7326,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_element_table(table, Some(1usize), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6918,14 +7352,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_element_table(table, Some(1usize), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6944,14 +7378,14 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_element_table(table, Some(1usize), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6961,7 +7395,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -6969,7 +7403,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -6980,7 +7414,7 @@ mod tests {
 
     // #[test]
     // fn set_element_table_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -6989,7 +7423,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Element(t), index, value)
@@ -7000,7 +7434,7 @@ mod tests {
 
     // #[test]
     // fn set_element_default_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7011,7 +7445,7 @@ mod tests {
     //         ElementTableUnion::Table(t) => t,
     //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2usize.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Element(t), value)
     //     });
@@ -7020,7 +7454,7 @@ mod tests {
 
     // #[test]
     // fn set_element_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7032,7 +7466,7 @@ mod tests {
     //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Element(t), value)
     //     });
@@ -7042,7 +7476,7 @@ mod tests {
 
     // #[test]
     // fn set_element_default_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7055,7 +7489,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Element(t), value)
     //     });
@@ -7065,14 +7499,14 @@ mod tests {
 
     // #[test]
     // fn update_element_table_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_element_table(table, Some(1usize), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -7091,7 +7525,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_no_default_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7099,7 +7533,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -7114,7 +7548,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7122,7 +7556,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -7142,7 +7576,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7150,7 +7584,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 1.5f64);
@@ -7170,7 +7604,7 @@ mod tests {
 
     // #[test]
     // fn update_element_table_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = ElementTableArgUnion::Table(FxHashMap::default());
@@ -7178,7 +7612,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![2usize].into_bound_py_any(py);
     //         let default = 3usize.into_bound_py_any(py);
     //         model.update_table(
@@ -7799,7 +8233,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
@@ -7809,7 +8243,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -7823,7 +8257,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_value_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
@@ -7835,7 +8269,7 @@ mod tests {
     //     let index = TableIndexUnion::Table1D(0);
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1usize.into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -7845,7 +8279,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
@@ -7857,7 +8291,7 @@ mod tests {
     //     let index = TableIndexUnion::Table1D(0);
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -7872,7 +8306,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -7884,7 +8318,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -7893,7 +8327,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -7906,7 +8340,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![10].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -7916,7 +8350,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -7928,7 +8362,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -7942,7 +8376,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_1d_item_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -7955,7 +8389,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(10);
@@ -7970,7 +8404,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -7994,7 +8428,7 @@ mod tests {
     //             set
     //         }),
     //     ];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8018,7 +8452,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -8033,7 +8467,7 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = 1usize.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8047,7 +8481,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -8072,7 +8506,7 @@ mod tests {
     //             set
     //         }),
     //     ]];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8086,7 +8520,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -8112,7 +8546,7 @@ mod tests {
     //     ];
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8126,7 +8560,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8142,7 +8576,7 @@ mod tests {
     //         SetTableUnion::Table1D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![], vec![0, 1, 2]].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8166,7 +8600,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8182,7 +8616,7 @@ mod tests {
     //         SetTableUnion::Table1D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![0, 1, 2, 10].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
@@ -8195,7 +8629,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8211,7 +8645,7 @@ mod tests {
     //         SetTableUnion::Table1D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -8242,7 +8676,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_1d_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8258,7 +8692,7 @@ mod tests {
     //         SetTableUnion::Table1D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -8885,7 +9319,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
@@ -8895,7 +9329,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -8909,7 +9343,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_value_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
@@ -8921,7 +9355,7 @@ mod tests {
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1usize.into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -8931,7 +9365,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
@@ -8943,7 +9377,7 @@ mod tests {
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -8958,7 +9392,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8970,7 +9404,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -8979,7 +9413,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -8992,7 +9426,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![10].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -9002,7 +9436,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9014,7 +9448,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -9028,7 +9462,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_2d_item_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9041,7 +9475,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(10);
@@ -9056,7 +9490,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -9080,7 +9514,7 @@ mod tests {
     //             set
     //         }),
     //     ]];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9104,7 +9538,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -9119,7 +9553,7 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = 1usize.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9133,7 +9567,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -9158,7 +9592,7 @@ mod tests {
     //             set
     //         }),
     //     ]]];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9172,7 +9606,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -9198,7 +9632,7 @@ mod tests {
     //     ]];
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9212,7 +9646,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9228,7 +9662,7 @@ mod tests {
     //         SetTableUnion::Table2D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![], vec![0, 1, 2]]].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9252,7 +9686,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9268,7 +9702,7 @@ mod tests {
     //         SetTableUnion::Table2D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![0, 1, 2, 10]]].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
@@ -9281,7 +9715,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9297,7 +9731,7 @@ mod tests {
     //         SetTableUnion::Table2D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -9328,7 +9762,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_2d_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -9344,7 +9778,7 @@ mod tests {
     //         SetTableUnion::Table2D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -9981,7 +10415,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
@@ -9991,7 +10425,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -10005,7 +10439,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_value_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
@@ -10017,7 +10451,7 @@ mod tests {
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1usize.into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -10027,7 +10461,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
@@ -10039,7 +10473,7 @@ mod tests {
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -10054,7 +10488,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10066,7 +10500,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -10075,7 +10509,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10088,7 +10522,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![10].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -10098,7 +10532,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10110,7 +10544,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -10124,7 +10558,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_3d_item_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10137,7 +10571,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(10);
@@ -10152,7 +10586,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -10176,7 +10610,7 @@ mod tests {
     //             set
     //         }),
     //     ]]];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10200,7 +10634,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -10215,7 +10649,7 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = 1usize.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10229,7 +10663,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -10254,7 +10688,7 @@ mod tests {
     //             set
     //         }),
     //     ]];
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10268,7 +10702,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -10294,7 +10728,7 @@ mod tests {
     //     ]]];
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10308,7 +10742,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10324,7 +10758,7 @@ mod tests {
     //         SetTableUnion::Table3D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![vec![], vec![0, 1, 2]]]].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10348,7 +10782,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10364,7 +10798,7 @@ mod tests {
     //         SetTableUnion::Table3D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![vec![0, 1, 2, 10]]]].into_bound_py_any(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
@@ -10377,7 +10811,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10393,7 +10827,7 @@ mod tests {
     //         SetTableUnion::Table3D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -10424,7 +10858,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_3d_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -10440,7 +10874,7 @@ mod tests {
     //         SetTableUnion::Table3D(t) => t,
     //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = vec![vec![vec![HashSet::new(), {
     //             let mut set = HashSet::new();
     //             set.insert(0);
@@ -11419,7 +11853,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_1d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11438,7 +11872,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -11457,7 +11891,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_2d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11476,7 +11910,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -11498,7 +11932,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_3d_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11517,7 +11951,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -11539,7 +11973,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11558,7 +11992,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -11580,7 +12014,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11596,7 +12030,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1usize.into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11606,7 +12040,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11623,7 +12057,7 @@ mod tests {
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
@@ -11638,7 +12072,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_1d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11659,7 +12093,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11673,7 +12107,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_2d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11694,7 +12128,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11711,7 +12145,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_3d_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11732,7 +12166,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11749,7 +12183,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11770,7 +12204,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11787,7 +12221,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11805,7 +12239,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![10].into_bound_py_any(py);
     //         model.set_table_item(TableUnion::Set(t), index, value)
     //     });
@@ -11815,7 +12249,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_1d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -11836,7 +12270,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -11855,7 +12289,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_2d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11876,7 +12310,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -11898,7 +12332,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_3d_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11919,7 +12353,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -11941,7 +12375,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -11962,7 +12396,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -11984,7 +12418,7 @@ mod tests {
 
     // #[test]
     // fn set_set_table_item_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12002,7 +12436,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(10);
@@ -12017,7 +12451,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_from_set_const_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -12035,7 +12469,7 @@ mod tests {
     //         SetTableUnion::Table(t) => t,
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value)
     //     });
@@ -12044,7 +12478,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -12063,7 +12497,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1usize.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value)
     //     });
@@ -12073,7 +12507,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
@@ -12093,7 +12527,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value)
     //     });
@@ -12103,7 +12537,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12123,7 +12557,7 @@ mod tests {
     //         SetTableUnion::Table(t) => t,
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1].into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value)
     //     });
@@ -12132,7 +12566,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12153,7 +12587,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![10].into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value)
     //     });
@@ -12163,7 +12597,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12183,7 +12617,7 @@ mod tests {
     //         SetTableUnion::Table(t) => t,
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(1);
@@ -12197,7 +12631,7 @@ mod tests {
 
     // #[test]
     // fn set_set_default_from_set_out_of_bound_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12218,7 +12652,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut set = HashSet::new();
     //             set.insert(10);
@@ -12233,7 +12667,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_set_const_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -12266,7 +12700,7 @@ mod tests {
     //         );
     //         map
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.update_table(
@@ -12296,7 +12730,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -12323,7 +12757,7 @@ mod tests {
     //         set
     //     })];
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.update_table(
@@ -12338,7 +12772,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -12358,7 +12792,7 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = 1usize.into_bound_py_any(py);
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.update_table(
@@ -12373,7 +12807,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -12407,7 +12841,7 @@ mod tests {
     //         map
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = 1usize.into_bound_py_any(py);
     //         model.update_table(
@@ -12422,7 +12856,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
 
@@ -12457,7 +12891,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
     //         model.update_table(
@@ -12472,7 +12906,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_set_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12504,7 +12938,7 @@ mod tests {
     //         });
     //         map
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = HashSet::<Element>::new().into_bound_py_any(py);
     //         model.update_table(
@@ -12534,7 +12968,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_set_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12568,7 +13002,7 @@ mod tests {
     //         map
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = HashSet::<Element>::new().into_bound_py_any(py);
     //         model.update_table(
@@ -12583,7 +13017,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_set_default_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12616,7 +13050,7 @@ mod tests {
     //         map
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = {
     //             let mut set = HashSet::<Element>::new();
@@ -12636,7 +13070,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_list_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12662,7 +13096,7 @@ mod tests {
     //         map.insert((0, 0, 0, 0), vec![0, 1, 2]);
     //         map
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = Vec::<Element>::new().into_bound_py_any(py);
     //         model.update_table(
@@ -12692,7 +13126,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_list_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12719,7 +13153,7 @@ mod tests {
     //         map
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = Vec::<Element>::new().into_bound_py_any(py);
     //         model.update_table(
@@ -12734,7 +13168,7 @@ mod tests {
 
     // #[test]
     // fn update_set_table_from_list_default_out_of_bound_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
@@ -12761,7 +13195,7 @@ mod tests {
     //         map
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let table = table.into_bound_py_any(py);
     //         let default = vec![10].into_bound_py_any(py);
     //         model.update_table(
@@ -12826,14 +13260,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_1d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -12843,7 +13277,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_1d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12851,7 +13285,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -12862,7 +13296,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_1d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12870,7 +13304,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -12881,7 +13315,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_1d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12890,7 +13324,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -12901,14 +13335,14 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![true].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -12917,7 +13351,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_1d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12925,7 +13359,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -12935,7 +13369,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_1d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12943,7 +13377,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -12953,7 +13387,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_1d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table1D(vec![true]);
@@ -12962,7 +13396,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![true].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13022,14 +13456,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_2d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13039,7 +13473,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_2d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13047,7 +13481,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13058,7 +13492,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_2d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13066,7 +13500,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13077,7 +13511,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_2d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13086,7 +13520,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13097,14 +13531,14 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13113,7 +13547,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_2d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13121,7 +13555,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13131,7 +13565,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_2d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13139,7 +13573,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13149,7 +13583,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_2d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table2D(vec![vec![true]]);
@@ -13158,7 +13592,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13218,14 +13652,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_3d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13235,7 +13669,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_3d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13243,7 +13677,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13254,7 +13688,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_3d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13262,7 +13696,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13273,7 +13707,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_3d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13282,7 +13716,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13293,14 +13727,14 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
     //     let t = model.add_bool_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13309,7 +13743,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_3d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13317,7 +13751,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13327,7 +13761,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_3d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13335,7 +13769,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13345,7 +13779,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_3d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table3D(vec![vec![vec![true]]]);
@@ -13354,7 +13788,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Bool(t), value, None)
     //     });
@@ -13423,14 +13857,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_bool_table(table, Some(true), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13446,14 +13880,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_bool_table(table, Some(true), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13469,14 +13903,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_bool_table(table, Some(true), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13492,14 +13926,14 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_bool_table(table, Some(true), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13509,7 +13943,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13517,7 +13951,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13528,7 +13962,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_table_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13537,7 +13971,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Bool(t), index, value)
@@ -13548,7 +13982,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_default_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13559,7 +13993,7 @@ mod tests {
     //         BoolTableUnion::Table(t) => t,
     //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = true.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Bool(t), value)
     //     });
@@ -13568,7 +14002,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13580,7 +14014,7 @@ mod tests {
     //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Bool(t), value)
     //     });
@@ -13590,7 +14024,7 @@ mod tests {
 
     // #[test]
     // fn set_bool_default_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13603,7 +14037,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Bool(t), value)
     //     });
@@ -13613,14 +14047,14 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_bool_table(table, Some(true), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), false);
@@ -13639,7 +14073,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_no_default_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13647,7 +14081,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), false);
@@ -13662,7 +14096,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13670,7 +14104,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), false);
@@ -13690,7 +14124,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13698,7 +14132,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 1.5f64);
@@ -13718,7 +14152,7 @@ mod tests {
 
     // #[test]
     // fn update_bool_table_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = BoolTableArgUnion::Table(FxHashMap::default());
@@ -13726,7 +14160,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![true].into_bound_py_any(py);
     //         let default = false.into_bound_py_any(py);
     //         model.update_table(
@@ -13791,14 +14225,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_1d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -13808,7 +14242,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_1d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13816,7 +14250,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -13827,7 +14261,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_1d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13835,7 +14269,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -13846,7 +14280,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_1d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13855,7 +14289,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -13866,14 +14300,14 @@ mod tests {
 
     // #[test]
     // fn update_int_table_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2i32].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -13882,7 +14316,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_1d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13890,7 +14324,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -13900,7 +14334,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_1d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13908,7 +14342,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -13918,7 +14352,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_1d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table1D(vec![1]);
@@ -13927,7 +14361,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2i32].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -13987,14 +14421,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_2d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14004,7 +14438,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_2d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14012,7 +14446,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14023,7 +14457,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_2d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14031,7 +14465,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14042,7 +14476,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_2d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14051,7 +14485,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14062,14 +14496,14 @@ mod tests {
 
     // #[test]
     // fn update_int_table_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14078,7 +14512,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_2d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14086,7 +14520,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14096,7 +14530,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_2d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14104,7 +14538,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14114,7 +14548,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_2d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table2D(vec![vec![1]]);
@@ -14123,7 +14557,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14183,14 +14617,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_3d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14200,7 +14634,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_3d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14208,7 +14642,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14219,7 +14653,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_3d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14227,7 +14661,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14238,7 +14672,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_3d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14247,7 +14681,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14258,14 +14692,14 @@ mod tests {
 
     // #[test]
     // fn update_int_table_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
     //     let t = model.add_int_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14274,7 +14708,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_3d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14282,7 +14716,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14292,7 +14726,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_3d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14300,7 +14734,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14310,7 +14744,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_3d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table3D(vec![vec![vec![1]]]);
@@ -14319,7 +14753,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Int(t), value, None)
     //     });
@@ -14388,14 +14822,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_int_table(table, Some(1i32), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14414,14 +14848,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_int_table(table, Some(1i32), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14440,14 +14874,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_int_table(table, Some(1i32), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14466,14 +14900,14 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_int_table(table, Some(1i32), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14483,7 +14917,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14491,7 +14925,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14502,7 +14936,7 @@ mod tests {
 
     // #[test]
     // fn set_int_table_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14511,7 +14945,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Int(t), index, value)
@@ -14522,7 +14956,7 @@ mod tests {
 
     // #[test]
     // fn set_int_default_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14533,7 +14967,7 @@ mod tests {
     //         IntTableUnion::Table(t) => t,
     //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2i32.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Int(t), value)
     //     });
@@ -14542,7 +14976,7 @@ mod tests {
 
     // #[test]
     // fn set_int_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14554,7 +14988,7 @@ mod tests {
     //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Int(t), value)
     //     });
@@ -14564,7 +14998,7 @@ mod tests {
 
     // #[test]
     // fn set_int_default_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14577,7 +15011,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 1.5f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Int(t), value)
     //     });
@@ -14587,14 +15021,14 @@ mod tests {
 
     // #[test]
     // fn update_int_table_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_int_table(table, Some(1i32), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -14613,7 +15047,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_no_default_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14621,7 +15055,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -14636,7 +15070,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14644,7 +15078,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -14664,7 +15098,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14672,7 +15106,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 1.5f64);
@@ -14692,7 +15126,7 @@ mod tests {
 
     // #[test]
     // fn update_int_table_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = IntTableArgUnion::Table(FxHashMap::default());
@@ -14700,7 +15134,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![2i32].into_bound_py_any(py);
     //         let default = 3i32.into_bound_py_any(py);
     //         model.update_table(
@@ -14765,14 +15199,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_1d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14782,7 +15216,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_1d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14790,7 +15224,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14801,7 +15235,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_1d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14809,7 +15243,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14820,7 +15254,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_1d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14829,7 +15263,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14840,14 +15274,14 @@ mod tests {
 
     // #[test]
     // fn update_float_table_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2f64].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -14856,7 +15290,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_1d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14864,7 +15298,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -14874,7 +15308,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_1d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14882,7 +15316,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -14892,7 +15326,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_1d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table1D(vec![1.0]);
@@ -14901,7 +15335,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![2f64].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -14961,14 +15395,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_2d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14978,7 +15412,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_2d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -14986,7 +15420,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -14997,7 +15431,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_2d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -15005,7 +15439,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15016,7 +15450,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_2d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -15025,7 +15459,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15036,14 +15470,14 @@ mod tests {
 
     // #[test]
     // fn update_float_table_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15052,7 +15486,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_2d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -15060,7 +15494,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15070,7 +15504,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_2d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -15078,7 +15512,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15088,7 +15522,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_2d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table2D(vec![vec![1.0]]);
@@ -15097,7 +15531,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15157,14 +15591,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_3d_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15174,7 +15608,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_3d_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15182,7 +15616,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15193,7 +15627,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_3d_item_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15201,7 +15635,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15212,7 +15646,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_3d_no_variable_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15221,7 +15655,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15232,14 +15666,14 @@ mod tests {
 
     // #[test]
     // fn update_float_table_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
     //     let t = model.add_float_table(table, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15248,7 +15682,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_3d_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15256,7 +15690,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![vec![1.5f64]]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15266,7 +15700,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_3d_value_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15274,7 +15708,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15284,7 +15718,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_3d_value_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table3D(vec![vec![vec![1.0]]]);
@@ -15293,7 +15727,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_bound_py_any(py);
     //         model.update_table(TableUnion::Float(t), value, None)
     //     });
@@ -15362,14 +15796,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_1d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_float_table(table, Some(1f64), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table1D(0);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15388,14 +15822,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_2d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_float_table(table, Some(1f64), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15414,14 +15848,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_3d_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_float_table(table, Some(1f64), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15440,14 +15874,14 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_float_table(table, Some(1f64), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15457,7 +15891,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15465,7 +15899,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15476,7 +15910,7 @@ mod tests {
 
     // #[test]
     // fn set_float_table_item_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15485,7 +15919,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //         model.set_table_item(TableUnion::Float(t), index, value)
@@ -15496,7 +15930,7 @@ mod tests {
 
     // #[test]
     // fn set_float_default_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15507,7 +15941,7 @@ mod tests {
     //         FloatTableUnion::Table(t) => t,
     //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = 2f64.into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Float(t), value)
     //     });
@@ -15516,7 +15950,7 @@ mod tests {
 
     // #[test]
     // fn set_float_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15528,7 +15962,7 @@ mod tests {
     //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Float(t), value)
     //     });
@@ -15538,7 +15972,7 @@ mod tests {
 
     // #[test]
     // fn set_float_default_no_table_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15551,7 +15985,7 @@ mod tests {
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![1.5f64].into_bound_py_any(py);
     //         model.set_default(SetDefaultArgUnion::Float(t), value)
     //     });
@@ -15561,14 +15995,14 @@ mod tests {
 
     // #[test]
     // fn update_float_table_ok() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_float_table(table, Some(1f64), None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -15587,7 +16021,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_no_default_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15595,7 +16029,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -15610,7 +16044,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_default_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15618,7 +16052,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), 2);
@@ -15638,7 +16072,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_value_extract_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15646,7 +16080,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = {
     //             let mut map = FxHashMap::default();
     //             map.insert((0, 0, 0, 0), vec![1.5f64]);
@@ -15666,7 +16100,7 @@ mod tests {
 
     // #[test]
     // fn update_float_table_dimension_err() {
-    //     pyo3::prepare_freethreaded_python();
+    //     Python::initialize();
 
     //     let mut model = ModelPy::default();
     //     let table = FloatTableArgUnion::Table(FxHashMap::default());
@@ -15674,7 +16108,7 @@ mod tests {
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let snapshot = model.clone();
-    //     let result = Python::with_gil(|py| {
+    //     let result = Python::attach(|py| {
     //         let value = vec![2f64].into_bound_py_any(py);
     //         let default = 3f64.into_bound_py_any(py);
     //         model.update_table(
@@ -15691,7 +16125,6 @@ mod tests {
     fn load_from_str_ok() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited

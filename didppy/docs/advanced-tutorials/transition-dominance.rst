@@ -73,7 +73,7 @@ Let's model the above DP formulation in DIDPPy.
 
     for c in range(n):
         sweep = dp.Transition(
-            name="sweep {}".format(c),
+            name=f"sweep {c}",
             cost=dp.max(
                 dp.IntExpr.state_cost(),
                 node_edge_weight[c] + edge_weight[clean, contaminated.remove(c)]

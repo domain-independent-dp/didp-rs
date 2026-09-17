@@ -1,10 +1,12 @@
 use super::continuous_expression::ContinuousExpression;
 use super::element_expression::ElementExpression;
 use super::integer_expression::IntegerExpression;
+use super::local_environment::LocalEnvironment;
 use super::set_expression::SetExpression;
+use super::substitute_local_variable::SubstituteLocalVariable;
 use super::table_expression::TableExpression;
 use super::{set_condition, SetCondition};
-use crate::state::{SetVariable, StateInterface};
+use crate::state::{SetResourceVariable, SetVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
@@ -41,6 +43,15 @@ impl ComparisonOperator {
     }
 }
 
+/// Quantifier over the elements of a set.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Quantifier {
+    /// Whether a condition holds for at least one element.
+    Any,
+    /// Whether a condition holds for every element.
+    All,
+}
+
 /// Condition.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Condition {
@@ -54,6 +65,8 @@ pub enum Condition {
     And(Box<Condition>, Box<Condition>),
     /// x or b.
     Or(Box<Condition>, Box<Condition>),
+    /// Whether a condition holds for the quantified elements of a set.
+    Quantified(Quantifier, Box<SetExpression>, usize, Box<Condition>),
     /// Comparing two element expressions.
     ComparisonE(
         ComparisonOperator,
@@ -311,6 +324,18 @@ impl Condition {
 }
 
 impl SetExpression {
+    /// Returns a condition checking if the given condition holds for any element in this set.
+    #[inline]
+    pub fn any(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        Condition::Quantified(Quantifier::Any, Box::new(self), x.id(), Box::new(f))
+    }
+
+    /// Returns a condition checking if the given condition holds for all elements in this set.
+    #[inline]
+    pub fn all(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        Condition::Quantified(Quantifier::All, Box::new(self), x.id(), Box::new(f))
+    }
+
     /// Returns a condition checking if an element is included in this set.
     ///
     /// # Examples
@@ -465,6 +490,18 @@ impl SetExpression {
 }
 
 impl SetVariable {
+    /// Returns a condition checking if the given condition holds for any element in this set.
+    #[inline]
+    pub fn any(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        SetExpression::from(self).any(x, f)
+    }
+
+    /// Returns a condition checking if the given condition holds for all elements in this set.
+    #[inline]
+    pub fn all(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        SetExpression::from(self).all(x, f)
+    }
+
     /// Returns a condition checking if an element is included in this set.
     ///
     /// # Examples
@@ -603,6 +640,172 @@ impl SetVariable {
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let set = model.create_set(object_type, &[]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let condition = variable.is_empty();
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
+    #[inline]
+    pub fn is_empty(self) -> Condition {
+        Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::from(self))))
+    }
+}
+
+impl SetResourceVariable {
+    /// Returns a condition checking if the given condition holds for any element in this set.
+    #[inline]
+    pub fn any(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        SetExpression::from(self).any(x, f)
+    }
+
+    /// Returns a condition checking if the given condition holds for all elements in this set.
+    #[inline]
+    pub fn all(self, x: crate::LocalVariable, f: Condition) -> Condition {
+        SetExpression::from(self).all(x, f)
+    }
+
+    /// Returns a condition checking if an element is included in this set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, false, set).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let condition = variable.contains(0);
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
+    #[inline]
+    pub fn contains<T>(self, element: T) -> Condition
+    where
+        ElementExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsIn(
+            ElementExpression::from(element),
+            SetExpression::from(self),
+        )))
+    }
+
+    /// Returns a condition checking if this set is equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_resource_variable("a", object_type, false, a).unwrap();
+    /// let b = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let condition = a.is_equal(b);
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
+    #[inline]
+    pub fn is_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsEqual(
+            From::from(self),
+            SetExpression::from(set),
+        )))
+    }
+
+    /// Returns a condition checking if this set is not equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_resource_variable("a", object_type, false, a).unwrap();
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let condition = a.is_not_equal(b);
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
+    #[inline]
+    pub fn is_not_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsNotEqual(
+            From::from(self),
+            SetExpression::from(set),
+        )))
+    }
+
+    /// Returns a condition checking if this set is a subset of the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_resource_variable("a", object_type, false, a).unwrap();
+    /// let b = model.create_set(object_type, &[0, 1, 2]).unwrap();
+    /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    ///
+    /// let condition = a.is_not_equal(b);
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
+    #[inline]
+    pub fn is_subset<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsSubset(
+            From::from(self),
+            SetExpression::from(set),
+        )))
+    }
+
+    /// Returns a condition checking if this set is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let set = model.create_set(object_type, &[]).unwrap();
+    /// let variable = model.add_set_resource_variable("variable", object_type, false, set).unwrap();
     /// let state = model.target.clone();
     /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
@@ -779,7 +982,7 @@ impl Condition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -805,38 +1008,178 @@ impl Condition {
         state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> bool {
+        let mut local_environment = LocalEnvironment::default();
+
+        self.eval_with_local_environment(
+            state,
+            function_cache,
+            &mut local_environment,
+            state_functions,
+            registry,
+        )
+    }
+
+    /// Evaluates the expression using the supplied local variable bindings.
+    ///
+    /// Unlike [`Self::eval`], this preserves access to variables bound by an enclosing expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::eval`], or if a referenced local variable is unbound.
+    pub fn eval_with_local_environment<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        local_environment: &mut LocalEnvironment,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> bool {
         match self {
             Self::Constant(value) => *value,
-            Self::StateFunction(i) => {
-                function_cache.get_boolean_value(*i, state, state_functions, registry)
-            }
-            Self::Not(condition) => {
-                !condition.eval(state, function_cache, state_functions, registry)
-            }
+            Self::StateFunction(i) => function_cache.get_boolean_value(
+                *i,
+                state,
+                local_environment,
+                state_functions,
+                registry,
+            ),
+            Self::Not(condition) => !condition.eval_with_local_environment(
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::And(x, y) => {
-                x.eval(state, function_cache, state_functions, registry)
-                    && y.eval(state, function_cache, state_functions, registry)
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) && y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
             }
             Self::Or(x, y) => {
-                x.eval(state, function_cache, state_functions, registry)
-                    || y.eval(state, function_cache, state_functions, registry)
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ) || y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                )
+            }
+            Self::Quantified(quantifier, set, id, condition) => {
+                let set = match set.as_ref() {
+                    SetExpression::Reference(set) => set.eval(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                    set => &set.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    ),
+                };
+                let before = local_environment.get(*id);
+                let mut eval_condition = |element| {
+                    local_environment.set(*id, element);
+                    condition.eval_with_local_environment(
+                        state,
+                        function_cache,
+                        local_environment,
+                        state_functions,
+                        registry,
+                    )
+                };
+                let result = match quantifier {
+                    Quantifier::Any => set.ones().any(&mut eval_condition),
+                    Quantifier::All => set.ones().all(&mut eval_condition),
+                };
+
+                if let Some(before) = before {
+                    local_environment.set(*id, before);
+                } else {
+                    local_environment.unset(*id);
+                }
+
+                result
             }
             Self::ComparisonE(op, x, y) => op.eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::ComparisonI(op, x, y) => op.eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
             Self::ComparisonC(op, x, y) => op.eval(
-                x.eval(state, function_cache, state_functions, registry),
-                y.eval(state, function_cache, state_functions, registry),
+                x.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
+                y.eval_with_local_environment(
+                    state,
+                    function_cache,
+                    local_environment,
+                    state_functions,
+                    registry,
+                ),
             ),
-            Self::Set(set) => set.eval(state, function_cache, state_functions, registry),
+            Self::Set(set) => set.eval_with_local_environment(
+                state,
+                function_cache,
+                local_environment,
+                state_functions,
+                registry,
+            ),
             Self::Table(table) => *table.eval(
                 state,
                 function_cache,
+                local_environment,
                 state_functions,
                 registry,
                 &registry.bool_tables,
@@ -848,7 +1191,7 @@ impl Condition {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &TableRegistry) -> Condition {
         match self {
             Self::Not(c) => match c.simplify(registry) {
@@ -869,6 +1212,44 @@ impl Condition {
                 (x, y) if x == y => x,
                 (x, y) => Self::Or(Box::new(x), Box::new(y)),
             },
+            Self::Quantified(quantifier, set, id, condition) => {
+                let quantifier = *quantifier;
+                let id = *id;
+                let set = set.simplify(registry);
+                let condition = condition.simplify(registry);
+
+                if let SetExpression::Reference(super::ReferenceExpression::Constant(set)) = &set {
+                    let mut has_unresolved_condition = false;
+
+                    for element in set.ones() {
+                        let condition = condition
+                            .substitute_local_variable(id, element)
+                            .simplify(registry);
+
+                        match (condition, quantifier) {
+                            (Self::Constant(true), Quantifier::Any) => return Self::Constant(true),
+                            (Self::Constant(false), Quantifier::All) => {
+                                return Self::Constant(false)
+                            }
+                            (Self::Constant(_), _) => {}
+                            _ => has_unresolved_condition = true,
+                        }
+                    }
+
+                    if !has_unresolved_condition {
+                        return match quantifier {
+                            Quantifier::Any => Self::Constant(false),
+                            Quantifier::All => Self::Constant(true),
+                        };
+                    }
+                }
+
+                match (quantifier, &condition) {
+                    (Quantifier::Any, Self::Constant(false)) => Self::Constant(false),
+                    (Quantifier::All, Self::Constant(true)) => Self::Constant(true),
+                    _ => Self::Quantified(quantifier, Box::new(set), id, Box::new(condition)),
+                }
+            }
             Self::ComparisonE(op, x, y) => match (op, x.simplify(registry), y.simplify(registry)) {
                 (op, ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
                     Self::Constant(op.eval(x, y))
@@ -917,6 +1298,21 @@ impl Condition {
                     ComparisonOperator::Le,
                     ElementExpression::StateFunction(x),
                     ElementExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Eq,
+                    ElementExpression::LocalVariable(x),
+                    ElementExpression::LocalVariable(y),
+                )
+                | (
+                    ComparisonOperator::Ge,
+                    ElementExpression::LocalVariable(x),
+                    ElementExpression::LocalVariable(y),
+                )
+                | (
+                    ComparisonOperator::Le,
+                    ElementExpression::LocalVariable(x),
+                    ElementExpression::LocalVariable(y),
                 ) if x == y => Self::Constant(true),
                 (op, x, y) => Self::ComparisonE(op.clone(), Box::new(x), Box::new(y)),
             },
@@ -1042,6 +1438,7 @@ mod tests {
     use crate::state::*;
     use crate::table_data::TableInterface;
     use crate::variable_type::Set;
+    use crate::Model;
     use rustc_hash::FxHashMap;
 
     #[test]
@@ -1111,6 +1508,232 @@ mod tests {
     }
 
     #[test]
+    fn quantified_conditions() {
+        let mut model = Model::default();
+        let object_type = model.add_object_type("object", 4).unwrap();
+        let x = model.add_local_variable("x").unwrap();
+        let set = model.create_set(object_type, &[0, 1, 2]).unwrap();
+        let empty = model.create_set(object_type, &[]).unwrap();
+        let state = model.target.clone();
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+
+        let greater_than_one =
+            Condition::comparison_e(ComparisonOperator::Gt, x, ElementExpression::Constant(1));
+        assert!(SetExpression::from(set.clone())
+            .any(x, greater_than_one.clone())
+            .eval(
+                &state,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ));
+        assert!(!SetExpression::from(set).all(x, greater_than_one).eval(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        ));
+        assert!(!SetExpression::from(empty.clone())
+            .any(x, Condition::Constant(true))
+            .eval(
+                &state,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ));
+        assert!(SetExpression::from(empty)
+            .all(x, Condition::Constant(false))
+            .eval(
+                &state,
+                &mut function_cache,
+                &model.state_functions,
+                &model.table_registry,
+            ));
+    }
+
+    #[test]
+    fn quantified_condition_restores_nested_binding() {
+        let mut model = Model::default();
+        let object_type = model.add_object_type("object", 2).unwrap();
+        let x = model.add_local_variable("x").unwrap();
+        let set = SetExpression::from(model.create_set(object_type, &[0, 1]).unwrap());
+        let empty = SetExpression::from(model.create_set(object_type, &[]).unwrap());
+        let inner = empty.all(x, Condition::Constant(false));
+        let outer_body = inner
+            & Condition::comparison_e(ComparisonOperator::Eq, x, ElementExpression::Constant(1));
+        let condition = set.any(x, outer_body);
+        let state = model.target.clone();
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+
+        assert!(condition.eval(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        ));
+    }
+
+    #[test]
+    fn quantified_condition_simplify_constant_set() {
+        let mut set = Set::with_capacity(4);
+        set.extend([0, 1, 2]);
+        let set = SetExpression::Reference(ReferenceExpression::Constant(set));
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_e(
+            ComparisonOperator::Eq,
+            ElementExpression::LocalVariable(0),
+            1,
+        );
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::Any,
+                Box::new(set.clone()),
+                0,
+                Box::new(condition.clone()),
+            )
+            .simplify(&registry),
+            Condition::Constant(true),
+        );
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::All,
+                Box::new(set.clone()),
+                0,
+                Box::new(condition),
+            )
+            .simplify(&registry),
+            Condition::Constant(false),
+        );
+
+        let condition = Condition::comparison_e(
+            ComparisonOperator::Gt,
+            ElementExpression::LocalVariable(0),
+            3,
+        );
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::Any,
+                Box::new(set.clone()),
+                0,
+                Box::new(condition),
+            )
+            .simplify(&registry),
+            Condition::Constant(false),
+        );
+
+        let condition = Condition::comparison_e(
+            ComparisonOperator::Lt,
+            ElementExpression::LocalVariable(0),
+            3,
+        );
+        assert_eq!(
+            Condition::Quantified(Quantifier::All, Box::new(set), 0, Box::new(condition))
+                .simplify(&registry),
+            Condition::Constant(true),
+        );
+
+        let empty = SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(4)));
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::Any,
+                Box::new(empty.clone()),
+                0,
+                Box::new(Condition::Constant(true)),
+            )
+            .simplify(&registry),
+            Condition::Constant(false),
+        );
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::All,
+                empty.into(),
+                0,
+                Box::new(Condition::Constant(false)),
+            )
+            .simplify(&registry),
+            Condition::Constant(true),
+        );
+    }
+
+    #[test]
+    fn quantified_condition_simplify_table_by_element() {
+        let mut model = Model::default();
+        let table = model
+            .add_table_1d("table", vec![false, true, false])
+            .unwrap();
+        let mut set = Set::with_capacity(3);
+        set.extend([0, 1]);
+        let set = SetExpression::Reference(ReferenceExpression::Constant(set));
+        let condition = table.element(ElementExpression::LocalVariable(0));
+
+        assert_eq!(
+            Condition::Quantified(
+                Quantifier::Any,
+                Box::new(set.clone()),
+                0,
+                Box::new(condition.clone()),
+            )
+            .simplify(&model.table_registry),
+            Condition::Constant(true),
+        );
+        assert_eq!(
+            Condition::Quantified(Quantifier::All, Box::new(set), 0, Box::new(condition))
+                .simplify(&model.table_registry),
+            Condition::Constant(false),
+        );
+    }
+
+    #[test]
+    fn quantified_condition_simplify_preserves_residual_conditions() {
+        let mut set = Set::with_capacity(2);
+        set.extend([0, 1]);
+        let set = SetExpression::Reference(ReferenceExpression::Constant(set));
+        let condition = Condition::comparison_e(
+            ComparisonOperator::Eq,
+            ElementExpression::LocalVariable(0),
+            ElementExpression::Variable(0),
+        );
+
+        let expression =
+            Condition::Quantified(Quantifier::Any, Box::new(set), 0, Box::new(condition));
+        assert_eq!(expression.simplify(&TableRegistry::default()), expression,);
+    }
+
+    #[test]
+    fn quantified_condition_simplify_respects_shadowing() {
+        let mut outer_set = Set::with_capacity(2);
+        outer_set.insert(0);
+        let mut inner_set = Set::with_capacity(2);
+        inner_set.insert(1);
+        let inner = Condition::Quantified(
+            Quantifier::All,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                inner_set,
+            ))),
+            0,
+            Box::new(Condition::comparison_e(
+                ComparisonOperator::Eq,
+                ElementExpression::LocalVariable(0),
+                1,
+            )),
+        );
+        let condition = Condition::Quantified(
+            Quantifier::Any,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                outer_set,
+            ))),
+            0,
+            Box::new(inner),
+        );
+
+        assert_eq!(
+            condition.simplify(&TableRegistry::default()),
+            Condition::Constant(true),
+        );
+    }
+
+    #[test]
     fn comparison_e() {
         assert_eq!(
             Condition::comparison_e(ComparisonOperator::Eq, 0, 1),
@@ -1171,6 +1794,17 @@ mod tests {
                 SetExpression::Reference(ReferenceExpression::Variable(v.id()))
             )))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("sv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.contains(0),
+            Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id()))
+            )))
+        );
     }
 
     #[test]
@@ -1196,6 +1830,17 @@ mod tests {
             v.is_equal(Set::default()),
             Condition::Set(Box::new(SetCondition::IsEqual(
                 SetExpression::Reference(ReferenceExpression::Variable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id())),
                 SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
             )))
         );
@@ -1227,6 +1872,17 @@ mod tests {
                 SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
             )))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_not_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
     }
 
     #[test]
@@ -1255,6 +1911,17 @@ mod tests {
                 SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
             )))
         );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_subset(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsSubset(
+                SetExpression::Reference(ReferenceExpression::ResourceVariable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
     }
 
     #[test]
@@ -1279,6 +1946,16 @@ mod tests {
             v.is_empty(),
             Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
                 ReferenceExpression::Variable(v.id())
+            ),)))
+        );
+
+        let v = metadata.add_set_resource_variable(String::from("srv"), ob, false);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_empty(),
+            Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(v.id())
             ),)))
         );
     }

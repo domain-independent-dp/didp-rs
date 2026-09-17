@@ -2,10 +2,12 @@ use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::{TransitionWithId},
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
+    data_structure::TransitionWithId, get_solution_cost_and_suffix, BeamSearchParameters, BfsNode,
+    SearchInput, Solution,
 };
-use dypdl::{variable_type, Model, ParentAndChildStateFunctionCache, ReduceFunction, TransitionInterface};
+use dypdl::{
+    variable_type, Model, ParentAndChildStateFunctionCache, ReduceFunction, TransitionInterface,
+};
 use rayon::prelude::*;
 use std::error::Error;
 use std::fmt::Display;
@@ -319,7 +321,7 @@ where
 
                             if exceed_bound(model, bound, primal_bound) {
                                 best_dual_bound = primal_bound;
-                            } else if best_dual_bound.map_or(true, |best_bound| {
+                            } else if best_dual_bound.is_none_or(|best_bound| {
                                 !exceed_bound(model, best_bound, Some(bound))
                             }) {
                                 best_dual_bound = Some(bound);

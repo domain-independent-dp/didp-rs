@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::str;
 
 pub fn load_from_yaml<T>(
-    model: dypdl::Model,
+    mut model: dypdl::Model,
     config: &yaml_rust::Yaml,
 ) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
@@ -67,7 +67,7 @@ where
                 }
             }
             transition_with_custom_cost::load_custom_cost_expressions(
-                &model,
+                &mut model,
                 false,
                 &custom_cost_type,
                 &g_expressions,
@@ -97,10 +97,12 @@ where
     let h_expression = match map.get(&yaml_rust::Yaml::from_str("h")) {
         Some(value) => match custom_cost_type {
             CostType::Integer => Some(CostExpression::from(
-                dypdl_parser::load_integer_expression_from_yaml(value, &model, &parameters)?,
+                dypdl_parser::load_integer_expression_from_yaml(value, &mut model, &parameters)?
+                    .simplify(&model.table_registry),
             )),
             CostType::Continuous => Some(CostExpression::from(
-                dypdl_parser::load_continuous_expression_from_yaml(value, &model, &parameters)?,
+                dypdl_parser::load_continuous_expression_from_yaml(value, &mut model, &parameters)?
+                    .simplify(&model.table_registry),
             )),
         },
         None => None,

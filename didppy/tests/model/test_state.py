@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import didppy as dp
 import pytest
 
@@ -18,7 +20,7 @@ class TestStateElementVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
     def test_set(self):
@@ -55,7 +57,7 @@ class TestStateElementResourceVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
     def test_set(self):
@@ -88,7 +90,7 @@ class TestStateSetVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
     def test_set(self):
@@ -116,10 +118,10 @@ class TestStateIntVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
-    set_cases = [3, -3]
+    set_cases: ClassVar = [3, -3]
 
     @pytest.mark.parametrize("value", set_cases)
     def test_set(self, value):
@@ -151,10 +153,10 @@ class TestStateIntResourceVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
-    set_cases = [3, -3]
+    set_cases: ClassVar = [3, -3]
 
     @pytest.mark.parametrize("value", set_cases)
     def test_set(self, value):
@@ -186,10 +188,10 @@ class TestStateFloatVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
-    set_cases = [
+    set_cases: ClassVar = [
         (3.5, pytest.approx(3.5)),
         (-3.5, pytest.approx(-3.5)),
         (3, pytest.approx(3.0)),
@@ -220,10 +222,10 @@ class TestStateFloatResourceVariable:
         model = dp.Model()
         state = model.target_state
 
-        with pytest.raises(BaseException):
+        with pytest.raises(BaseException, match="index out of bounds"):
             state[self.var1]
 
-    set_cases = [
+    set_cases: ClassVar = [
         (3.5, pytest.approx(3.5)),
         (-3.5, pytest.approx(-3.5)),
         (3, pytest.approx(3.0)),

@@ -16,7 +16,7 @@ use pyo3::prelude::*;
 /// >>> table = model.add_element_table([2, 3])
 /// >>> table[var].eval(model.target_state, model)
 /// 3
-#[pyclass(name = "ElementTable1D")]
+#[pyclass(name = "ElementTable1D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable1DPy(Table1DHandle<Element>);
 
@@ -52,7 +52,7 @@ impl ElementTable1DPy {
 /// >>> table = model.add_element_table([[2, 3], [0, 1]])
 /// >>> table[0, var].eval(model.target_state, model)
 /// 3
-#[pyclass(name = "ElementTable2D")]
+#[pyclass(name = "ElementTable2D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable2DPy(Table2DHandle<Element>);
 
@@ -89,7 +89,7 @@ impl ElementTable2DPy {
 /// >>> table = model.add_element_table([[[2, 3], [0, 1]], [[0, 1], [2, 2]]])
 /// >>> table[0, 0, var].eval(model.target_state, model)
 /// 3
-#[pyclass(name = "ElementTable3D")]
+#[pyclass(name = "ElementTable3D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable3DPy(Table3DHandle<Element>);
 
@@ -126,7 +126,7 @@ impl ElementTable3DPy {
 /// >>> table = model.add_element_table({(0, 0, 0, 0): 1, (1, 1, 1, 1): 3}, default=2)
 /// >>> table[0, var, 1, 0].eval(model.target_state, model)
 /// 2
-#[pyclass(name = "ElementTable")]
+#[pyclass(name = "ElementTable", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTablePy(TableHandle<Element>);
 
@@ -164,7 +164,7 @@ impl ElementTablePy {
 /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
 /// >>> table[var].eval(model.target_state, model)
 /// {2, 3}
-#[pyclass(name = "SetTable1D")]
+#[pyclass(name = "SetTable1D", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable1DPy(Table1DHandle<Set>, usize);
 
@@ -301,7 +301,7 @@ impl SetTable1DPy {
 /// ... )
 /// >>> table[0, var].eval(model.target_state, model)
 /// {2, 3}
-#[pyclass(name = "SetTable2D")]
+#[pyclass(name = "SetTable2D", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable2DPy(Table2DHandle<Set>, usize);
 
@@ -454,7 +454,7 @@ impl SetTable2DPy {
 /// ... )
 /// >>> table[0, var, 1].eval(model.target_state, model)
 /// {1, 2}
-#[pyclass(name = "SetTable3D")]
+#[pyclass(name = "SetTable3D", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable3DPy(Table3DHandle<Set>, usize);
 
@@ -619,7 +619,7 @@ impl SetTable3DPy {
 /// ... )
 /// >>> table[0, var, 0, 1].eval(model.target_state, model)
 /// set()
-#[pyclass(name = "SetTable")]
+#[pyclass(name = "SetTable", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTablePy(TableHandle<Set>, usize);
 
@@ -774,7 +774,7 @@ impl SetTablePy {
 /// >>> table = model.add_bool_table([True, False])
 /// >>> table[var].eval(model.target_state, model)
 /// False
-#[pyclass(name = "BoolTable1D")]
+#[pyclass(name = "BoolTable1D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable1DPy(Table1DHandle<bool>);
 
@@ -810,7 +810,7 @@ impl BoolTable1DPy {
 /// >>> table = model.add_bool_table([[True, False], [False, True]])
 /// >>> table[0, var].eval(model.target_state, model)
 /// False
-#[pyclass(name = "BoolTable2D")]
+#[pyclass(name = "BoolTable2D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable2DPy(Table2DHandle<bool>);
 
@@ -849,7 +849,7 @@ impl BoolTable2DPy {
 /// ... )
 /// >>> table[0, var, 1].eval(model.target_state, model)
 /// True
-#[pyclass(name = "BoolTable3D")]
+#[pyclass(name = "BoolTable3D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable3DPy(Table3DHandle<bool>);
 
@@ -886,7 +886,7 @@ impl BoolTable3DPy {
 /// >>> table = model.add_bool_table({(0, 0, 0, 0): False, (1, 1, 1, 1): True}, default=False)
 /// >>> table[1, var, 1, 1].eval(model.target_state, model)
 /// True
-#[pyclass(name = "BoolTable")]
+#[pyclass(name = "BoolTable", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTablePy(TableHandle<bool>);
 
@@ -944,7 +944,7 @@ impl From<ArgumentUnion> for ArgumentExpression {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[set_var].eval(model.target_state, model)
 /// 5
-#[pyclass(name = "IntTable1D")]
+#[pyclass(name = "IntTable1D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable1DPy(Table1DHandle<Integer>);
 
@@ -1060,7 +1060,7 @@ impl IntTable1DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[var, set_var].eval(model.target_state, model)
 /// 1
-#[pyclass(name = "IntTable2D")]
+#[pyclass(name = "IntTable2D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable2DPy(Table2DHandle<Integer>);
 
@@ -1201,6 +1201,21 @@ impl IntTable2DPy {
             (ArgumentUnion::Set(x), ArgumentUnion::Set(y)) => self.0.min(x, y),
         })
     }
+
+    /// Computes the minimum spanning tree value over a node set.
+    ///
+    /// Parameters
+    /// ----------
+    /// nodes: SetExpr, SetVar, SetResourceVar, or SetConst
+    ///     Nodes included in the graph.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum spanning tree value.
+    fn minimum_spanning_tree(&self, nodes: SetUnion) -> IntExprPy {
+        IntExprPy::from(self.0.minimum_spanning_tree(SetExpression::from(nodes)))
+    }
 }
 
 /// 3-dimensional table of integer constants.
@@ -1218,7 +1233,7 @@ impl IntTable2DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[var, set_var, 1].eval(model.target_state, model)
 /// 1
-#[pyclass(name = "IntTable3D")]
+#[pyclass(name = "IntTable3D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable3DPy(Table3DHandle<Integer>);
 
@@ -1382,7 +1397,7 @@ impl IntTable3DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[0, var, set_var, 0].eval(model.target_state, model)
 /// 4
-#[pyclass(name = "IntTable")]
+#[pyclass(name = "IntTable", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTablePy(TableHandle<Integer>);
 
@@ -1543,7 +1558,7 @@ impl IntTablePy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[set_var].eval(model.target_state, model)
 /// 6.0
-#[pyclass(name = "FloatTable1D")]
+#[pyclass(name = "FloatTable1D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable1DPy(Table1DHandle<Continuous>);
 
@@ -1659,7 +1674,7 @@ impl FloatTable1DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[var, set_var].eval(model.target_state, model)
 /// 1.0
-#[pyclass(name = "FloatTable2D")]
+#[pyclass(name = "FloatTable2D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable2DPy(Table2DHandle<Continuous>);
 
@@ -1800,6 +1815,21 @@ impl FloatTable2DPy {
             (ArgumentUnion::Set(x), ArgumentUnion::Set(y)) => self.0.min(x, y),
         })
     }
+
+    /// Computes the minimum spanning tree value over a node set.
+    ///
+    /// Parameters
+    /// ----------
+    /// nodes: SetExpr, SetVar, SetResourceVar, or SetConst
+    ///     Nodes included in the graph.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum spanning tree value.
+    fn minimum_spanning_tree(&self, nodes: SetUnion) -> FloatExprPy {
+        FloatExprPy::from(self.0.minimum_spanning_tree(SetExpression::from(nodes)))
+    }
 }
 
 /// Table of continuous constants.
@@ -1817,7 +1847,7 @@ impl FloatTable2DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[var, set_var, 1].eval(model.target_state, model)
 /// 1.0
-#[pyclass(name = "FloatTable3D")]
+#[pyclass(name = "FloatTable3D", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable3DPy(Table3DHandle<Continuous>);
 
@@ -1981,7 +2011,7 @@ impl FloatTable3DPy {
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
 /// >>> table[0, var, set_var, 0].eval(model.target_state, model)
 /// 5.0
-#[pyclass(name = "FloatTable")]
+#[pyclass(name = "FloatTable", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTablePy(TableHandle<Continuous>);
 
@@ -3296,6 +3326,25 @@ mod tests {
     }
 
     #[test]
+    fn int_table_2d_minimum_spanning_tree() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let nodes = Set::with_capacity(10);
+        assert_eq!(
+            t_py.minimum_spanning_tree(SetUnion::Const(SetConstPy::from(nodes.clone()))),
+            IntExprPy::from(IntegerExpression::MinimumSpanningTree(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    nodes
+                ))),
+                t.id()
+            ))
+        );
+    }
+
+    #[test]
     fn int_table_3d_new() {
         let mut model = Model::default();
         let t = model.add_table_3d("t", vec![vec![vec![1]]]);
@@ -4212,6 +4261,25 @@ mod tests {
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                 )
             )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_minimum_spanning_tree() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let nodes = Set::with_capacity(10);
+        assert_eq!(
+            t_py.minimum_spanning_tree(SetUnion::Const(SetConstPy::from(nodes.clone()))),
+            FloatExprPy::from(ContinuousExpression::MinimumSpanningTree(
+                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                    nodes
+                ))),
+                t.id()
+            ))
         );
     }
 

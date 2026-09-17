@@ -1,5 +1,6 @@
-import didppy as dp
 import math
+
+import didppy as dp
 import pytest
 
 
@@ -43,7 +44,7 @@ def bpp_model(num_items, weights, capacity):
     name_to_item = {}
 
     for i in range(num_items):
-        name = "pack {}".format(i)
+        name = f"pack {i}"
         name_to_item[name] = i
         t = dp.Transition(
             name=name,
@@ -60,7 +61,7 @@ def bpp_model(num_items, weights, capacity):
         )
         model.add_transition(t)
 
-        name = "open a new bin and pack {}".format(i)
+        name = f"open a new bin and pack {i}"
         name_to_item[name] = i
         ft = dp.Transition(
             name=name,
@@ -106,9 +107,7 @@ def cvrp_model(num_locations, nodes, edges, capacity, demand, max_vehicles):
     load = model.add_int_resource_var(target=0, less_is_better=True)
     vehicles = model.add_int_resource_var(target=1, less_is_better=True)
     demand = model.add_int_table([demand[i] for i in nodes])
-    distance_matrix = [
-        [edges[i, j] if (i, j) in edges else 0 for j in nodes] for i in nodes
-    ]
+    distance_matrix = [[edges.get((i, j), 0) for j in nodes] for i in nodes]
     distance = model.add_int_table(distance_matrix)
     distance_via_depot = model.add_int_table(
         [
@@ -116,7 +115,7 @@ def cvrp_model(num_locations, nodes, edges, capacity, demand, max_vehicles):
                 (
                     edges[i, nodes[0]] + edges[nodes[0], j]
                     if (i, nodes[0]) in edges and (nodes[0], j) in edges
-                    else edges[i, j] if (i, j) in edges else 0
+                    else edges.get((i, j), 0)
                 )
                 for j in nodes
             ]
@@ -128,7 +127,7 @@ def cvrp_model(num_locations, nodes, edges, capacity, demand, max_vehicles):
     name_to_partial_tour = {}
 
     for i in range(1, num_locations):
-        name = "visit {}".format(i)
+        name = f"visit {i}"
         name_to_partial_tour[name] = (nodes[i],)
         visit = dp.Transition(
             name=name,
@@ -143,7 +142,7 @@ def cvrp_model(num_locations, nodes, edges, capacity, demand, max_vehicles):
         model.add_transition(visit)
 
     for i in range(1, num_locations):
-        name = "visit {} via depot".format(i)
+        name = f"visit {i} via depot"
         name_to_partial_tour[name] = (nodes[0], nodes[i])
         visit_via_depot = dp.Transition(
             name=name,
@@ -208,7 +207,7 @@ def graph_clear_model(num_nodes, node_weights, edge_weights):
                 (
                     edge_weights[i, j]
                     if (i, j) in edge_weights
-                    else edge_weights[j, i] if (j, i) in edge_weights else 0
+                    else edge_weights.get((j, i), 0)
                 )
                 for j in range(num_nodes)
             ]
@@ -221,7 +220,7 @@ def graph_clear_model(num_nodes, node_weights, edge_weights):
     name_to_node = {}
 
     for i in range(num_nodes):
-        name = "sweep {}".format(i)
+        name = f"sweep {i}"
         name_to_node[name] = i
         t = dp.Transition(
             name=name,

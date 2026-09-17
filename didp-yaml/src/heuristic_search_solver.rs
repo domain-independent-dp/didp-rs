@@ -13,7 +13,6 @@ mod dual_bound_lnbs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
 mod forward_recursion;
-mod solution;
 mod solver_parameters;
 mod transition_with_custom_cost;
 
@@ -25,7 +24,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::str;
 
-pub use solution::{CostToDump, SolutionToDump};
+pub use crate::solution::{CostToDump, SolutionToDump};
 
 /// Returns a heuristic search solver specified by a YAML configuration file.
 ///

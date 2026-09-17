@@ -6,7 +6,10 @@ use std::convert::TryFrom;
 use std::error;
 use std::fmt;
 use std::str;
-use yaml_rust::{yaml::Array, Yaml};
+use yaml_rust::{
+    yaml::{Array, Hash},
+    Yaml,
+};
 
 /// Error representing that the format is invalid.
 #[derive(Debug, Clone)]
@@ -32,9 +35,7 @@ impl error::Error for YamlContentErr {}
 /// # Errors
 ///
 /// If the YAML is not a map.
-pub fn get_map(
-    value: &Yaml,
-) -> Result<&linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
+pub fn get_map(value: &Yaml) -> Result<&Hash, YamlContentErr> {
     match value {
         Yaml::Hash(map) => Ok(map),
         _ => Err(YamlContentErr::new(
@@ -48,10 +49,7 @@ pub fn get_map(
 /// # Errors
 ///
 /// If no such key exists.
-pub fn get_yaml_by_key<'a>(
-    map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<&'a Yaml, YamlContentErr> {
+pub fn get_yaml_by_key<'a>(map: &'a Hash, key: &str) -> Result<&'a Yaml, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => Ok(value),
         None => Err(YamlContentErr::new(format!("no such key `{key}` in yaml",))),
@@ -91,10 +89,7 @@ pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
 /// # Errors
 ///
 /// If no such key exists or it cannot be parsed.
-pub fn get_bool_by_key(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<bool, YamlContentErr> {
+pub fn get_bool_by_key(map: &Hash, key: &str) -> Result<bool, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_bool(value),
         None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
@@ -145,10 +140,7 @@ pub fn get_usize_array(value: &Yaml) -> Result<Vec<usize>, YamlContentErr> {
 /// # Errors
 ///
 /// If no such key exists or it cannot be parsed.
-pub fn get_usize_by_key(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<usize, YamlContentErr> {
+pub fn get_usize_by_key(map: &Hash, key: &str) -> Result<usize, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize(value),
         None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
@@ -160,10 +152,7 @@ pub fn get_usize_by_key(
 /// # Errors
 ///
 /// If no such key exists or it cannot be parsed.
-pub fn get_usize_array_by_key(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<Vec<usize>, YamlContentErr> {
+pub fn get_usize_array_by_key(map: &Hash, key: &str) -> Result<Vec<usize>, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize_array(value),
         None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
@@ -204,7 +193,7 @@ where
 ///
 /// If no such key exists or it cannot be parsed.
 pub fn get_numeric_by_key<T: str::FromStr + num_traits::FromPrimitive>(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    map: &Hash,
     key: &str,
 ) -> Result<T, YamlContentErr>
 where
@@ -290,10 +279,7 @@ pub fn get_table_arg_array(
 /// # Errors
 ///
 /// If no such key exists or it cannot be parsed.
-pub fn get_string_by_key(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<String, YamlContentErr> {
+pub fn get_string_by_key(map: &Hash, key: &str) -> Result<String, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_string(value),
         None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
@@ -321,7 +307,7 @@ mod tests {
 
     #[test]
     fn get_map_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::Integer(0), Yaml::Integer(2));
         let yaml = Yaml::Hash(map);
         let map = get_map(&yaml);
@@ -340,7 +326,7 @@ mod tests {
 
     #[test]
     fn get_yaml_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("yaml")), Yaml::Integer(2));
         let yaml = get_yaml_by_key(&map, "yaml");
         assert!(yaml.is_ok());
@@ -349,7 +335,7 @@ mod tests {
 
     #[test]
     fn get_yaml_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("yaml")), Yaml::Integer(2));
         let yaml = get_yaml_by_key(&map, "json");
         assert!(yaml.is_err());
@@ -390,7 +376,7 @@ mod tests {
 
     #[test]
     fn get_bool_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
         let result = get_bool_by_key(&map, "bool");
         assert!(result.is_ok());
@@ -399,7 +385,7 @@ mod tests {
 
     #[test]
     fn get_bool_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("integer")), Yaml::Integer(0));
         let result = get_bool_by_key(&map, "array");
         assert!(result.is_err());
@@ -451,7 +437,7 @@ mod tests {
 
     #[test]
     fn get_usize_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("usize")), Yaml::Integer(0));
         let result = get_usize_by_key(&map, "usize");
         assert!(result.is_ok());
@@ -460,7 +446,7 @@ mod tests {
 
     #[test]
     fn get_usize_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
         map.insert(Yaml::String(String::from("integer")), Yaml::Integer(-1));
         let result = get_usize_by_key(&map, "array");
@@ -473,7 +459,7 @@ mod tests {
 
     #[test]
     fn get_usize_array_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(
             Yaml::String(String::from("array")),
             Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]),
@@ -485,7 +471,7 @@ mod tests {
 
     #[test]
     fn get_usize_array_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(
             Yaml::String(String::from("array1")),
             Yaml::Array(vec![Yaml::Integer(0), Yaml::Boolean(true)]),
@@ -522,7 +508,7 @@ mod tests {
 
     #[test]
     fn get_numeric_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("numeric")), Yaml::Integer(0));
         let result = get_numeric_by_key::<variable_type::Integer>(&map, "numeric");
         assert!(result.is_ok());
@@ -531,7 +517,7 @@ mod tests {
 
     #[test]
     fn get_numeric_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(
             Yaml::String(String::from("numeric")),
             Yaml::Real(String::from("0.5")),
@@ -649,7 +635,7 @@ mod tests {
 
     #[test]
     fn get_string_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(
             Yaml::String(String::from("string")),
             Yaml::String(String::from("0")),
@@ -661,7 +647,7 @@ mod tests {
 
     #[test]
     fn get_string_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        let mut map = Hash::new();
         map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
         let result = get_string_by_key(&map, "array");
         assert!(result.is_err());

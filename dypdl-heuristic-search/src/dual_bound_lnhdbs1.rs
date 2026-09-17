@@ -1,8 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{hd_beam_search2, CostNodeMessage, FNodeMessage};
-use super::search_algorithm::{rollout, Cabs, CabsParameters, CostNode,
-    FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput, Search, SearchInput, StateInRegistry,
-    SuccessorGenerator, TransitionMutex, TransitionWithId,
+use super::search_algorithm::{
+    rollout, Cabs, CabsParameters, CostNode, FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput,
+    Search, SearchInput, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use super::Solution;
 use dypdl::variable_type;

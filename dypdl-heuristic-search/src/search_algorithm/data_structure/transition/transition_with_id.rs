@@ -2,6 +2,7 @@ use dypdl::{
     variable_type::Numeric, StateFunctionCache, StateFunctions, Transition, TransitionInterface,
 };
 
+/// A transition together with its index and forced-transition flag.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TransitionWithId<T = Transition>
 where

@@ -1,4 +1,5 @@
 use super::expression_parser;
+use super::expression_parser::ModelData;
 use super::state_parser::ground_parameters_from_yaml;
 use crate::util;
 use dypdl::prelude::*;
@@ -20,19 +21,21 @@ pub fn load_grounded_conditions_from_yaml(
     functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
     lazy_static! {
         static ref FORALL_KEY: Yaml = Yaml::from_str("forall");
     }
     match value {
         Yaml::String(condition) => {
-            let condition = expression_parser::parse_condition(
-                condition.clone(),
+            let mut model_data = ModelData {
                 metadata,
                 functions,
                 registry,
                 parameters,
-            )?;
+                local_variable_data,
+            };
+            let condition = expression_parser::parse_condition(condition.clone(), &mut model_data)?;
             Ok(vec![GroundedCondition::from(condition.simplify(registry))])
         }
         Yaml::Hash(map) => {
@@ -42,36 +45,44 @@ pub fn load_grounded_conditions_from_yaml(
                     let (
                         parameters_array,
                         elements_in_set_variable_array,
-                        elements_in_vector_variable_array,
+                        elements_in_set_resource_variable_array,
                     ) = ground_parameters_from_yaml(metadata, forall)?;
                     let mut conditions = Vec::with_capacity(parameters_array.len());
-                    for ((forall, elements_in_set_variable), elements_in_vector_variable) in
-                        parameters_array
-                            .into_iter()
-                            .zip(elements_in_set_variable_array.into_iter())
-                            .zip(elements_in_vector_variable_array.into_iter())
+                    for (forall, (elements_in_set_variable, elements_in_set_resource_variable)) in
+                        parameters_array.into_iter().zip(
+                            elements_in_set_variable_array
+                                .into_iter()
+                                .zip(elements_in_set_resource_variable_array),
+                        )
                     {
                         let mut parameters = parameters.clone();
                         parameters.extend(forall);
-                        let condition = expression_parser::parse_condition(
-                            condition.clone(),
+                        let mut model_data = ModelData {
                             metadata,
                             functions,
                             registry,
-                            &parameters,
-                        )?;
+                            parameters: &parameters,
+                            local_variable_data: &mut *local_variable_data,
+                        };
+                        let condition =
+                            expression_parser::parse_condition(condition.clone(), &mut model_data)?;
                         conditions.push(GroundedCondition {
                             condition: condition.simplify(registry),
                             elements_in_set_variable,
-                            elements_in_vector_variable,
+                            elements_in_set_resource_variable,
                         });
                     }
                     Ok(conditions)
                 }
                 None => {
-                    let condition = expression_parser::parse_condition(
-                        condition, metadata, functions, registry, parameters,
-                    )?;
+                    let mut model_data = ModelData {
+                        metadata,
+                        functions,
+                        registry,
+                        parameters,
+                        local_variable_data,
+                    };
+                    let condition = expression_parser::parse_condition(condition, &mut model_data)?;
                     Ok(vec![GroundedCondition::from(condition.simplify(registry))])
                 }
             }
@@ -95,8 +106,6 @@ mod tests {
         assert!(result.is_ok());
         let ob = result.unwrap();
         let result = metadata.add_set_variable(String::from("s0"), ob);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
@@ -128,15 +137,16 @@ condition: (and (is_in e0 s0) true)
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Variable(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
             ))),
+            ..Default::default()
         }];
         assert_eq!(conditions.unwrap(), expected);
 
@@ -153,6 +163,7 @@ condition: (and (is_in e0 s0) true)
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_ok());
         assert_eq!(conditions.unwrap(), expected);
@@ -171,15 +182,16 @@ condition: (and (is_in e0 s0) true)
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
             ))),
+            ..Default::default()
         }];
         assert_eq!(conditions.unwrap(), expected);
 
@@ -202,58 +214,19 @@ forall:
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_ok());
         let expected = vec![
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 0)],
-                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(true),
+                ..Default::default()
             },
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 1)],
-                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(false),
-            },
-        ];
-        assert_eq!(conditions.unwrap(), expected);
-
-        let condition = r"
-condition: (is_in e s0)
-forall:
-        - name: e
-          object: p0
-";
-        let condition = yaml_rust::YamlLoader::load_from_str(condition);
-        assert!(condition.is_ok());
-        let condition = condition.unwrap();
-        assert_eq!(condition.len(), 1);
-        let condition = &condition[0];
-
-        let conditions = load_grounded_conditions_from_yaml(
-            condition,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-        );
-        assert!(conditions.is_ok());
-        let expected = vec![
-            GroundedCondition {
-                elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 0, 2)],
-                condition: Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(0),
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ))),
-            },
-            GroundedCondition {
-                elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 1, 2)],
-                condition: Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(1),
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ))),
+                ..Default::default()
             },
         ];
         assert_eq!(conditions.unwrap(), expected);
@@ -266,8 +239,6 @@ forall:
         assert!(result.is_ok());
         let ob = result.unwrap();
         let result = metadata.add_set_variable(String::from("s0"), ob);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
@@ -299,6 +270,7 @@ conddition: (is_in e0 s0)
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_err());
 
@@ -320,6 +292,7 @@ forall:
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_err());
 
@@ -340,6 +313,7 @@ forall:
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_err());
 
@@ -361,6 +335,7 @@ forall:
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_err());
 
@@ -381,6 +356,7 @@ forall:
             &functions,
             &registry,
             &parameters,
+            &mut LocalVariableData::default(),
         );
         assert!(conditions.is_err());
     }

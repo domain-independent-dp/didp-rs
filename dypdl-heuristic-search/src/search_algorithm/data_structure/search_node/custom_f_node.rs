@@ -21,8 +21,11 @@ pub struct CustomFNode<
     P = Rc<C>,
 > {
     node: CostNode<T, TransitionWithId<TransitionWithCustomCost>, R, C, P>,
+    /// Path cost computed with the custom transition costs.
     pub g: U,
+    /// Custom heuristic value, negated when the custom evaluation minimizes cost, so it can be used as priority value for ordering.
     pub h: U,
+    /// Custom evaluation value, negated when the custom evaluation minimizes cost, so it can be used as priority value for ordering.
     pub f: U,
 }
 
@@ -314,9 +317,9 @@ where
             &model.table_registry,
         );
         function_cache.child.clear();
-        let node =
-            self.node
-                .generate_successor_node(transition, function_cache, model)?;
+        let node = self
+            .node
+            .generate_successor_node(transition, function_cache, model)?;
         let h = (evaluators.h)(node.state(), &mut function_cache.child)?;
         let f = (evaluators.f)(g, h, node.state());
         let (h, f) = if maximize { (h, f) } else { (-h, -f) };

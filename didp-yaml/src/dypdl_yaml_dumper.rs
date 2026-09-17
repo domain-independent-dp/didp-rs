@@ -1,3 +1,5 @@
+//! Conversion of DyPDL models to YAML domain and problem documents.
+
 use dypdl::expression::Condition;
 use dypdl::{CostType, Model, ReduceFunction};
 use state_to_yaml::state_to_yaml;
@@ -24,6 +26,11 @@ use transition_dominance_to_yaml::transition_dominance_to_yaml;
 use transition_to_yaml::transition_to_yaml;
 use variable_to_yaml::*;
 
+/// Converts a model into its domain and problem YAML documents, in that order.
+///
+/// # Errors
+///
+/// Returns an error if a model expression cannot be represented in YAML.
 pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     let mut domain_hash = Hash::new();
     let mut problem_hash = Hash::new();
@@ -123,6 +130,14 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     if number_of_set_variables > 0 {
         state_variables.extend(
             (0..number_of_set_variables).map(|i: usize| set_variable_to_yaml(state_metadata, i)),
+        );
+    }
+
+    let number_of_set_resource_variables = state_metadata.number_of_set_resource_variables();
+    if number_of_set_resource_variables > 0 {
+        state_variables.extend(
+            (0..number_of_set_resource_variables)
+                .map(|i: usize| set_resource_variable_to_yaml(state_metadata, i)),
         );
     }
 
@@ -329,6 +344,11 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     Ok((Yaml::Hash(domain_hash), Yaml::Hash(problem_hash)))
 }
 
+/// Serializes a model into domain and problem YAML strings, in that order.
+///
+/// # Errors
+///
+/// Returns an error if a model expression cannot be represented in YAML.
 pub fn dump_model(model: &Model) -> Result<(String, String), Box<dyn Error>> {
     let (domain_yaml, problem_yaml) = model_to_yaml(model)?;
 
@@ -392,9 +412,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names: vec![],
-            name_to_vector_variable: FxHashMap::default(),
-            vector_variable_to_object: vec![],
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -473,6 +490,34 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn model_with_set_resource_variables_round_trip() {
+        let mut model = Model::default();
+        let object = model.add_object_type("object", 3).unwrap();
+        let first_target = model.create_set(object, &[0]).unwrap();
+        let second_target = model.create_set(object, &[1]).unwrap();
+        let first = model
+            .add_set_resource_variable("first", object, false, first_target)
+            .unwrap();
+        let second = model
+            .add_set_resource_variable("second", object, true, second_target)
+            .unwrap();
+        let mut transition = Transition::new("update");
+        transition.add_effect(second, first).unwrap();
+        transition.add_effect(first, second).unwrap();
+        model.add_forward_transition(transition).unwrap();
+        model.add_base_case(vec![first.is_empty()]).unwrap();
+
+        let (domain, problem) = dump_model(&model).unwrap();
+        let domain = yaml_rust::YamlLoader::load_from_str(&domain).unwrap();
+        let problem = yaml_rust::YamlLoader::load_from_str(&problem).unwrap();
+        let reloaded = dypdl_parser::load_model_from_yaml(&domain[0], &problem[0]).unwrap();
+
+        assert_eq!(model.state_metadata, reloaded.state_metadata);
+        assert_eq!(model.target, reloaded.target);
+        assert_eq!(model.forward_transitions, reloaded.forward_transitions);
     }
 
     #[test]

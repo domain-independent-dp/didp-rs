@@ -8,4 +8,5 @@ This tutorial covers several features that are not covered in the :doc:`first tu
 
     advanced-tutorials/forced-transitions
     advanced-tutorials/general-cost
+    advanced-tutorials/higher-order-expression
     advanced-tutorials/transition-dominance

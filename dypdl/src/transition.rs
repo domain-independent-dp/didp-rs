@@ -1,12 +1,13 @@
 use crate::effect::Effect;
 use crate::expression::{
     Condition, ContinuousExpression, ElementExpression, IntegerExpression, ReferenceExpression,
-    SetCondition, SetExpression, VectorExpression,
+    SetCondition, SetExpression,
 };
 use crate::grounded_condition;
 use crate::state::{
     ContinuousResourceVariable, ContinuousVariable, ElementResourceVariable, ElementVariable,
-    IntegerResourceVariable, IntegerVariable, SetVariable, State, StateInterface, VectorVariable,
+    IntegerResourceVariable, IntegerVariable, SetResourceVariable, SetVariable, State,
+    StateInterface,
 };
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
@@ -68,7 +69,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -110,7 +111,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     /// # Examples
     ///
     /// ```
@@ -159,7 +160,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     pub fn simplify(&self, registry: &table_registry::TableRegistry) -> CostExpression {
         match self {
             Self::Integer(expression) => Self::Integer(expression.simplify(registry)),
@@ -204,16 +205,16 @@ pub trait TransitionInterface {
 pub struct Transition {
     /// Name of the transition.
     pub name: String,
-    //// Names of parameters.
+    /// Names of parameters.
     pub parameter_names: Vec<String>,
     /// The values of parameters.
     pub parameter_values: Vec<Element>,
     /// Pairs of an index of a set variable and a parameter.
     /// A parameter must be included in the corresponding variable to be applicable.
     pub elements_in_set_variable: Vec<(usize, Element)>,
-    /// Triplets of an index of a vector variable, a parameter, and the capacity.
+    /// Pairs of an index of a set resource variable and a parameter.
     /// A parameter must be included in the corresponding variable to be applicable.
-    pub elements_in_vector_variable: Vec<(usize, Element, usize)>,
+    pub elements_in_set_resource_variable: Vec<(usize, Element)>,
     /// Preconditions.
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
     /// Effect.
@@ -227,7 +228,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -274,8 +275,8 @@ impl TransitionInterface for Transition {
                 return false;
             }
         }
-        for (i, v, _) in &self.elements_in_vector_variable {
-            if !state.get_vector_variable(*i).contains(v) {
+        for (i, v) in &self.elements_in_set_resource_variable {
+            if !state.get_set_resource_variable(*i).contains(*v) {
                 return false;
             }
         }
@@ -288,7 +289,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -322,7 +323,7 @@ impl TransitionInterface for Transition {
     ///
     /// # Panics
     ///
-    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set.
     ///
     /// # Examples
     ///
@@ -434,11 +435,8 @@ impl Transition {
     /// );
     /// ```
     pub fn get_preconditions(&self) -> Vec<Condition> {
-        let mut result = Vec::with_capacity(
-            self.elements_in_set_variable.len()
-                + self.elements_in_vector_variable.len()
-                + self.preconditions.len(),
-        );
+        let mut result =
+            Vec::with_capacity(self.elements_in_set_variable.len() + self.preconditions.len());
 
         for (i, e) in &self.elements_in_set_variable {
             result.push(Condition::Set(Box::new(SetCondition::IsIn(
@@ -447,15 +445,10 @@ impl Transition {
             ))));
         }
 
-        for (i, e, capacity) in &self.elements_in_vector_variable {
+        for (i, e) in &self.elements_in_set_resource_variable {
             result.push(Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(*e),
-                SetExpression::FromVector(
-                    *capacity,
-                    Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                        *i,
-                    ))),
-                ),
+                SetExpression::Reference(ReferenceExpression::ResourceVariable(*i)),
             ))));
         }
 
@@ -493,14 +486,10 @@ impl Transition {
                 }
                 SetCondition::IsIn(
                     ElementExpression::Constant(e),
-                    SetExpression::FromVector(capacity, v),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(i)),
                 ) => {
-                    if let VectorExpression::Reference(ReferenceExpression::Variable(i)) =
-                        v.as_ref()
-                    {
-                        self.elements_in_vector_variable.push((*i, *e, *capacity));
-                        return;
-                    }
+                    self.elements_in_set_resource_variable.push((*i, *e));
+                    return;
                 }
                 _ => {}
             },
@@ -576,7 +565,7 @@ macro_rules! impl_add_effect {
 }
 
 impl_add_effect!(SetVariable, SetExpression, set_effects);
-impl_add_effect!(VectorVariable, VectorExpression, vector_effects);
+impl_add_effect!(SetResourceVariable, SetExpression, set_resource_effects);
 impl_add_effect!(ElementVariable, ElementExpression, element_effects);
 impl_add_effect!(
     ElementResourceVariable,
@@ -640,13 +629,13 @@ mod tests {
         set2.insert(1);
         state::State {
             signature_variables: state::SignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2], vec![1, 2]],
+                set_variables: vec![set1.clone(), set2],
                 element_variables: vec![1, 2],
                 integer_variables: vec![1, 2, 3],
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: state::ResourceVariables {
+                set_variables: vec![set1],
                 element_variables: vec![0, 1],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
@@ -839,7 +828,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 0), (1, 1)],
-            elements_in_vector_variable: vec![(0, 0, 3), (1, 2, 3)],
+            elements_in_set_resource_variable: vec![(0, 0)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -879,7 +868,6 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_vector_variable: vec![(0, 0, 3), (1, 2, 3)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -892,8 +880,8 @@ mod tests {
 
         let transition = Transition {
             name: String::from(""),
-            elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_vector_variable: vec![(0, 1, 3), (1, 2, 3)],
+            elements_in_set_variable: vec![(0, 0), (1, 1)],
+            elements_in_set_resource_variable: vec![(0, 1)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -921,18 +909,6 @@ mod tests {
             ElementExpression::Constant(0),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
-        let vector_effect1 = VectorExpression::Push(
-            ElementExpression::Constant(1),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let vector_effect2 = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
-        );
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
         let integer_effect1 = IntegerExpression::BinaryOperation(
@@ -954,6 +930,13 @@ mod tests {
             BinaryOperator::Mul,
             Box::new(ContinuousExpression::Variable(1)),
             Box::new(ContinuousExpression::Constant(2.0)),
+        );
+        let set_resource_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(
+                ReferenceExpression::ResourceVariable(0),
+            )),
         );
         let element_resource_effect1 = ElementExpression::Constant(1);
         let element_resource_effect2 = ElementExpression::Constant(0);
@@ -981,10 +964,10 @@ mod tests {
             name: String::from(""),
             effect: Effect {
                 set_effects: vec![(0, set_effect1), (1, set_effect2)],
-                vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
                 element_effects: vec![(0, element_effect1), (1, element_effect2)],
                 integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
                 continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+                set_resource_effects: vec![(0, set_resource_effect1)],
                 element_resource_effects: vec![
                     (0, element_resource_effect1),
                     (1, element_resource_effect2),
@@ -1012,15 +995,17 @@ mod tests {
         set1.insert(2);
         let mut set2 = Set::with_capacity(3);
         set2.insert(1);
+        let mut set3 = Set::with_capacity(3);
+        set3.insert(2);
         let expected = state::State {
             signature_variables: state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
                 continuous_variables: vec![0.0, 4.0, 3.0],
             },
             resource_variables: state::ResourceVariables {
+                set_variables: vec![set3],
                 element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],
@@ -1114,7 +1099,7 @@ mod tests {
     fn get_preconditions() {
         let transition = Transition {
             elements_in_set_variable: vec![(0, 1), (1, 2)],
-            elements_in_vector_variable: vec![(2, 3, 4), (3, 4, 5)],
+            elements_in_set_resource_variable: vec![(0, 0)],
             preconditions: vec![
                 grounded_condition::GroundedCondition {
                     condition: Condition::Set(Box::new(SetCondition::IsIn(
@@ -1145,22 +1130,8 @@ mod tests {
                     SetExpression::Reference(ReferenceExpression::Variable(1)),
                 ))),
                 Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(3),
-                    SetExpression::FromVector(
-                        4,
-                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                            2
-                        )))
-                    ),
-                ))),
-                Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(4),
-                    SetExpression::FromVector(
-                        5,
-                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                            3
-                        )))
-                    ),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
                 ))),
                 Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Variable(0),
@@ -1199,40 +1170,6 @@ mod tests {
                 ..Default::default()
             }
         );
-        transition.add_precondition(Condition::Set(Box::new(SetCondition::IsIn(
-            ElementExpression::Constant(0),
-            SetExpression::FromVector(
-                10,
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0,
-                ))),
-            ),
-        ))));
-        assert_eq!(
-            transition,
-            Transition {
-                elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0, 10)],
-                ..Default::default()
-            }
-        );
-        transition.add_precondition(Condition::Set(Box::new(SetCondition::IsIn(
-            ElementExpression::Constant(1),
-            SetExpression::FromVector(
-                10,
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    1,
-                ))),
-            ),
-        ))));
-        assert_eq!(
-            transition,
-            Transition {
-                elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
-                ..Default::default()
-            }
-        );
         transition.add_precondition(Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Variable(0)),
@@ -1242,7 +1179,6 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
                 preconditions: vec![grounded_condition::GroundedCondition {
                     condition: Condition::ComparisonE(
                         ComparisonOperator::Eq,
@@ -1263,7 +1199,36 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
+                preconditions: vec![
+                    grounded_condition::GroundedCondition {
+                        condition: Condition::ComparisonE(
+                            ComparisonOperator::Eq,
+                            Box::new(ElementExpression::Variable(0)),
+                            Box::new(ElementExpression::Constant(0))
+                        ),
+                        ..Default::default()
+                    },
+                    grounded_condition::GroundedCondition {
+                        condition: Condition::ComparisonE(
+                            ComparisonOperator::Eq,
+                            Box::new(ElementExpression::Variable(1)),
+                            Box::new(ElementExpression::Constant(1))
+                        ),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }
+        );
+        transition.add_precondition(Condition::Set(Box::new(SetCondition::IsIn(
+            ElementExpression::Constant(0),
+            SetExpression::Reference(ReferenceExpression::ResourceVariable(0)),
+        ))));
+        assert_eq!(
+            transition,
+            Transition {
+                elements_in_set_variable: vec![(0, 0), (1, 1)],
+                elements_in_set_resource_variable: vec![(0, 0)],
                 preconditions: vec![
                     grounded_condition::GroundedCondition {
                         condition: Condition::ComparisonE(
@@ -1441,60 +1406,66 @@ mod tests {
     }
 
     #[test]
-    fn add_vector_effect_ok() {
+    fn add_set_resource_effect_ok() {
         let mut metadata = state::StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v1 = metadata.add_vector_variable(String::from("v1"), ob);
+        let v1 = metadata.add_set_resource_variable(String::from("v1"), ob, false);
         assert!(v1.is_ok());
         let v1 = v1.unwrap();
-        let v2 = metadata.add_vector_variable(String::from("v2"), ob);
+        let v2 = metadata.add_set_resource_variable(String::from("v2"), ob, false);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
-        let v3 = metadata.add_vector_variable(String::from("v3"), ob);
+        let v3 = metadata.add_set_resource_variable(String::from("v3"), ob, false);
         assert!(v3.is_ok());
         let v3 = v3.unwrap();
-        let v4 = metadata.add_vector_variable(String::from("v4"), ob);
+        let v4 = metadata.add_set_resource_variable(String::from("v4"), ob, true);
         assert!(v4.is_ok());
         let v4 = v4.unwrap();
 
         let mut transition = Transition::default();
-        let result = transition.add_effect(
-            v3,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![])),
-        );
+        let mut effect = Set::with_capacity(10);
+        effect.insert(1);
+        let result = transition.add_effect(v3, effect);
         assert!(result.is_ok());
         assert_eq!(
             transition,
             Transition {
                 effect: Effect {
-                    vector_effects: vec![(
+                    set_resource_effects: vec![(
                         v3.id(),
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                        SetExpression::Reference(ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(10);
+                            set.insert(1);
+                            set
+                        }))
                     )],
                     ..Default::default()
                 },
                 ..Default::default()
             },
         );
-        let result = transition.add_effect(
-            v1,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-        );
+        let result = transition.add_effect(v1, Set::with_capacity(10));
         assert!(result.is_ok());
         assert_eq!(
             transition,
             Transition {
                 effect: Effect {
-                    vector_effects: vec![
+                    set_resource_effects: vec![
                         (
                             v1.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
+                            SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10)
+                            ))
                         ),
                         (
                             v3.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
                         )
                     ],
                     ..Default::default()
@@ -1502,27 +1473,32 @@ mod tests {
                 ..Default::default()
             },
         );
-        let result = transition.add_effect(
-            v2,
-            VectorExpression::Reference(ReferenceExpression::Variable(v1.id())),
-        );
+        let result = transition.add_effect(v2, v1);
         assert!(result.is_ok());
         assert_eq!(
             transition,
             Transition {
                 effect: Effect {
-                    vector_effects: vec![
+                    set_resource_effects: vec![
                         (
                             v1.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
+                            SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10)
+                            ))
                         ),
                         (
                             v2.id(),
-                            VectorExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                            SetExpression::Reference(ReferenceExpression::ResourceVariable(
+                                v1.id()
+                            ))
                         ),
                         (
                             v3.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
                         )
                     ],
                     ..Default::default()
@@ -1530,31 +1506,38 @@ mod tests {
                 ..Default::default()
             },
         );
-        let result = transition.add_effect(
-            v4,
-            VectorExpression::Reference(ReferenceExpression::Variable(v2.id())),
-        );
+        let result = transition.add_effect(v4, v2);
         assert!(result.is_ok());
         assert_eq!(
             transition,
             Transition {
                 effect: Effect {
-                    vector_effects: vec![
+                    set_resource_effects: vec![
                         (
                             v1.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
+                            SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10)
+                            ))
                         ),
                         (
                             v2.id(),
-                            VectorExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                            SetExpression::Reference(ReferenceExpression::ResourceVariable(
+                                v1.id()
+                            ))
                         ),
                         (
                             v3.id(),
-                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
                         ),
                         (
                             v4.id(),
-                            VectorExpression::Reference(ReferenceExpression::Variable(v2.id()))
+                            SetExpression::Reference(ReferenceExpression::ResourceVariable(
+                                v2.id()
+                            ))
                         ),
                     ],
                     ..Default::default()
@@ -1565,25 +1548,19 @@ mod tests {
     }
 
     #[test]
-    fn add_vector_effect_err() {
+    fn add_set_resource_effect_err() {
         let mut metadata = state::StateMetadata::default();
         let ob = metadata.add_object_type(String::from("something"), 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
+        let v = metadata.add_set_resource_variable(String::from("v"), ob, false);
         assert!(v.is_ok());
         let v = v.unwrap();
 
         let mut transition = Transition::default();
-        let result = transition.add_effect(
-            v,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-        );
+        let result = transition.add_effect(v, Set::with_capacity(10));
         assert!(result.is_ok());
-        let result = transition.add_effect(
-            v,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
-        );
+        let result = transition.add_effect(v, Set::with_capacity(10));
         assert!(result.is_err());
     }
 

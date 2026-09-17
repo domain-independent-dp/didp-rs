@@ -30,14 +30,8 @@ tables:
     args:
       - customer
       - customer
-  - name: min_distance_to
+  - name: min_distance_to_depot
     type: integer
-    args:
-      - customer
-  - name: min_distance_from
-    type: integer
-    args:
-      - customer
 transitions:
   - name: visit
     parameters:
@@ -77,5 +71,4 @@ constraints:
       (>= (+ (* (- m vehicles) q) q)
           (+ load (sum weight unvisited)))
 dual_bounds:
-  - (+ (sum min_distance_to unvisited) (if (!= location 0) (min_distance_to 0) 0))
-  - (+ (sum min_distance_from unvisited) (if (!= location 0) (min_distance_from location) 0))
+  - (+ (minimum_spanning_tree (add location unvisited) distance) (if (!= location 0) min_distance_to_depot 0))

@@ -1,6 +1,5 @@
 use super::data_structure::{
-    exceed_bound, BfsNode, StateRegistry, SuccessorGenerator,
-    TransitionWithId,
+    exceed_bound, BfsNode, StateRegistry, SuccessorGenerator, TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};

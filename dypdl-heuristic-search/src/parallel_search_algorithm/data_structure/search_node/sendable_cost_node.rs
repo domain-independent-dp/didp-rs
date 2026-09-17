@@ -6,7 +6,9 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface,
+};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::sync::atomic;

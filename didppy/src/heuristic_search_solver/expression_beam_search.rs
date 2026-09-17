@@ -121,10 +121,11 @@ impl ExpressionBeamSearchPy {
         custom_cost_type: CostType,
         custom_cost_dict: &HashMap<String, CostUnion>,
     ) -> PyResult<(Vec<CostExpression>, Vec<CostExpression>)> {
+        let table_registry = &model.inner_as_ref().table_registry;
         let mut custom_costs = vec![];
         for t in &model.inner_as_ref().forward_transitions {
             let cost = if let Some(cost) = custom_cost_dict.get(&t.get_full_name()) {
-                CostExpression::from(cost.clone())
+                CostExpression::from(cost.clone()).simplify(table_registry)
             } else {
                 t.cost.clone()
             };
@@ -140,7 +141,7 @@ impl ExpressionBeamSearchPy {
         let mut forced_custom_costs = vec![];
         for t in &model.inner_as_ref().forward_forced_transitions {
             let cost = if let Some(cost) = custom_cost_dict.get(&t.get_full_name()) {
-                CostExpression::from(cost.clone())
+                CostExpression::from(cost.clone()).simplify(table_registry)
             } else {
                 t.cost.clone()
             };

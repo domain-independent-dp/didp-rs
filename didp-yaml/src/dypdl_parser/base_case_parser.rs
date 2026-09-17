@@ -1,3 +1,4 @@
+use super::expression_parser::ModelData;
 use super::grounded_condition_parser::load_grounded_conditions_from_yaml;
 use super::load_state_from_yaml;
 use super::parse_expression_from_yaml::{parse_continuous_from_yaml, parse_integer_from_yaml};
@@ -5,15 +6,16 @@ use crate::util;
 use dypdl::prelude::*;
 use dypdl::{BaseCase, GroundedCondition, ModelErr, TableRegistry};
 use lazy_static::lazy_static;
-use linked_hash_map::LinkedHashMap;
 use rustc_hash::FxHashMap;
 use std::error::Error;
+use yaml_rust::yaml::Hash;
 
 fn load_conditions_from_array(
     array: &Vec<yaml_rust::Yaml>,
     metadata: &StateMetadata,
     functions: &StateFunctions,
     registry: &TableRegistry,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
     let parameters = FxHashMap::default();
     let mut conditions = Vec::new();
@@ -24,13 +26,11 @@ fn load_conditions_from_array(
             functions,
             registry,
             &parameters,
+            local_variable_data,
         )?;
         for c in condition {
             match c.condition {
-                Condition::Constant(false)
-                    if c.elements_in_set_variable.is_empty()
-                        && c.elements_in_vector_variable.is_empty() =>
-                {
+                Condition::Constant(false) if c.elements_in_set_variable.is_empty() => {
                     return Err(
                         ModelErr::new(String::from("a base case is never satisfied")).into(),
                     )
@@ -44,11 +44,12 @@ fn load_conditions_from_array(
 }
 
 fn load_base_case_from_hash(
-    map: &LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
+    map: &Hash,
     metadata: &StateMetadata,
     functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<BaseCase, Box<dyn Error>> {
     lazy_static! {
         static ref CONDITIONS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("conditions");
@@ -57,27 +58,30 @@ fn load_base_case_from_hash(
 
     if let Some(array) = map.get(&CONDITIONS_KEY) {
         let array = util::get_array(array)?;
-        let conditions = load_conditions_from_array(array, metadata, functions, registry)?;
+        let conditions =
+            load_conditions_from_array(array, metadata, functions, registry, local_variable_data)?;
         let parameters = FxHashMap::default();
 
         match map.get(&COST_KEY) {
-            Some(cost) => match cost_type {
-                CostType::Integer => {
-                    let cost =
-                        parse_integer_from_yaml(cost, metadata, functions, registry, &parameters)?;
-                    Ok(BaseCase::with_cost(conditions, cost))
+            Some(cost) => {
+                let mut model_data = ModelData {
+                    metadata,
+                    functions,
+                    registry,
+                    parameters: &parameters,
+                    local_variable_data,
+                };
+                match cost_type {
+                    CostType::Integer => {
+                        let cost = parse_integer_from_yaml(cost, &mut model_data)?;
+                        Ok(BaseCase::with_cost(conditions, cost.simplify(registry)))
+                    }
+                    CostType::Continuous => {
+                        let cost = parse_continuous_from_yaml(cost, &mut model_data)?;
+                        Ok(BaseCase::with_cost(conditions, cost.simplify(registry)))
+                    }
                 }
-                CostType::Continuous => {
-                    let cost = parse_continuous_from_yaml(
-                        cost,
-                        metadata,
-                        functions,
-                        registry,
-                        &parameters,
-                    )?;
-                    Ok(BaseCase::with_cost(conditions, cost.simplify(registry)))
-                }
-            },
+            }
             None => Ok(BaseCase::from(conditions)),
         }
     } else {
@@ -96,15 +100,27 @@ pub fn load_base_case_from_yaml(
     functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
+    local_variable_data: &mut LocalVariableData,
 ) -> Result<BaseCase, Box<dyn Error>> {
     match value {
         yaml_rust::Yaml::Array(array) => {
-            let conditions = load_conditions_from_array(array, metadata, functions, registry)?;
+            let conditions = load_conditions_from_array(
+                array,
+                metadata,
+                functions,
+                registry,
+                local_variable_data,
+            )?;
             Ok(BaseCase::from(conditions))
         }
-        yaml_rust::Yaml::Hash(map) => {
-            load_base_case_from_hash(map, metadata, functions, registry, cost_type)
-        }
+        yaml_rust::Yaml::Hash(map) => load_base_case_from_hash(
+            map,
+            metadata,
+            functions,
+            registry,
+            cost_type,
+            local_variable_data,
+        ),
         _ => Err(util::YamlContentErr::new(format!("expected Array, found `{value:?}`")).into()),
     }
 }
@@ -203,8 +219,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -238,8 +260,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -266,8 +294,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         let expected = BaseCase::from(vec![GroundedCondition {
             condition: Condition::Constant(false),
@@ -307,8 +341,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -347,8 +387,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -387,8 +433,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -413,8 +465,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -438,8 +496,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -463,8 +527,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -489,8 +559,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -515,8 +591,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -541,8 +623,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 
@@ -568,8 +656,14 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
+        let base_case = load_base_case_from_yaml(
+            &base_case[0],
+            &metadata,
+            &functions,
+            &registry,
+            &cost_type,
+            &mut LocalVariableData::default(),
+        );
         assert!(base_case.is_err());
     }
 

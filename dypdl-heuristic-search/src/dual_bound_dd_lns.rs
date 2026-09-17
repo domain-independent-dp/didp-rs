@@ -1,8 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, rollout, Cabs, CabsParameters,
-    CostNode, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput, Search, SearchInput,
-    Solution, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
+    beam_search, rollout, Cabs, CabsParameters, CostNode, DdLns, DdLnsParameters, FNode,
+    NeighborhoodSearchInput, Search, SearchInput, Solution, StateInRegistry, SuccessorGenerator,
+    TransitionMutex, TransitionWithId,
 };
 use dypdl::{variable_type, ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
@@ -272,13 +272,12 @@ where
             solution
         });
 
-        let transition_evaluator = move |node: &CostNode<_, _>,
-                                         transition,
-                                         cache: &mut ParentAndChildStateFunctionCache,
-                                         registry: &mut _,
-                                         _| {
-            node.insert_successor_node(transition, cache, registry)
-        };
+        let transition_evaluator =
+            move |node: &CostNode<_, _>,
+                  transition,
+                  cache: &mut ParentAndChildStateFunctionCache,
+                  registry: &mut _,
+                  _| { node.insert_successor_node(transition, cache, registry) };
         parameters.beam_search_parameters.parameters.time_limit = parameters
             .beam_search_parameters
             .parameters

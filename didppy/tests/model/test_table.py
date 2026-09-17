@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import didppy as dp
 import pytest
 
@@ -21,7 +23,7 @@ class TestElementTable1D:
     table = model.add_element_table([1, 0])
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (zero_expr, 1),
         (zero_var, 1),
         (zero_resource_var, 1),
@@ -36,11 +38,14 @@ class TestElementTable1D:
     def test(self, x, expected):
         assert self.table[x].eval(self.state, self.model) == expected
 
-    error_cases = [-1, dp.IntExpr(0), 2]
+    error_cases: ClassVar = [-1, dp.IntExpr(0), 2]
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -76,7 +81,7 @@ class TestElementTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, -1),
         (-1, 0),
@@ -88,7 +93,10 @@ class TestElementTable2D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -170,7 +178,7 @@ class TestElementTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, 1),
         (-1, 0, 0),
@@ -186,7 +194,10 @@ class TestElementTable3D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -225,7 +236,7 @@ class TestElementTable:
     def test(self, index, expected):
         assert self.table[index].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         (-1, 0, 0),
         (0, -1, 0),
         (0, 0, -1),
@@ -236,7 +247,7 @@ class TestElementTable:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(TypeError):
             self.table[index].eval(self.state, self.model)
 
 
@@ -263,7 +274,7 @@ class TestSetTable1D:
     table = model.add_set_table([[1], [0]], object_type=obj)
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (zero_expr, {1}),
         (zero_var, {1}),
         (zero_resource_var, {1}),
@@ -278,7 +289,7 @@ class TestSetTable1D:
     def test(self, x, expected):
         assert self.table[x].eval(self.state, self.model) == expected
 
-    union_cases = [
+    union_cases: ClassVar = [
         (set_const, {0, 1}),
         (set_expr, {0, 1}),
         (set_var, {0, 1}),
@@ -288,7 +299,7 @@ class TestSetTable1D:
     def test_union(self, x, expected):
         assert self.table.union(x).eval(self.state, self.model) == expected
 
-    intersection_cases = [
+    intersection_cases: ClassVar = [
         (set_const, set()),
         (set_expr, set()),
         (set_var, set()),
@@ -298,7 +309,7 @@ class TestSetTable1D:
     def test_intersection(self, x, expected):
         assert self.table.intersection(x).eval(self.state, self.model) == expected
 
-    symmetric_difference_cases = [
+    symmetric_difference_cases: ClassVar = [
         (set_const, {0, 1}),
         (set_expr, {0, 1}),
         (set_var, {0, 1}),
@@ -310,11 +321,14 @@ class TestSetTable1D:
             self.table.symmetric_difference(x).eval(self.state, self.model) == expected
         )
 
-    error_cases = [-1, dp.IntExpr(0), 2]
+    error_cases: ClassVar = [-1, dp.IntExpr(0), 2]
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -354,7 +368,7 @@ class TestSetTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    union_cases = []
+    union_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -369,7 +383,7 @@ class TestSetTable2D:
     def test_union(self, x, y, expected):
         assert self.table.union(x, y).eval(self.state, self.model) == expected
 
-    intersection_cases = []
+    intersection_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -384,7 +398,7 @@ class TestSetTable2D:
     def test_intersection(self, x, y, expected):
         assert self.table.intersection(x, y).eval(self.state, self.model) == expected
 
-    symmetric_difference_cases = []
+    symmetric_difference_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -402,7 +416,7 @@ class TestSetTable2D:
             == expected
         )
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (-1, 0),
         (0, -1),
@@ -414,7 +428,10 @@ class TestSetTable2D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -504,7 +521,7 @@ class TestSetTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    union_cases = []
+    union_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -524,7 +541,7 @@ class TestSetTable3D:
     def test_union(self, x, y, z, expected):
         assert self.table.union(x, y, z).eval(self.state, self.model) == expected
 
-    intersection_cases = []
+    intersection_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -549,7 +566,7 @@ class TestSetTable3D:
     def test_intersection(self, x, y, z, expected):
         assert self.table.intersection(x, y, z).eval(self.state, self.model) == expected
 
-    symmetric_difference_cases = []
+    symmetric_difference_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -572,7 +589,7 @@ class TestSetTable3D:
             == expected
         )
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, 1),
         (-1, 0, 0),
@@ -588,7 +605,10 @@ class TestSetTable3D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -633,7 +653,7 @@ class TestSetTable:
     def test(self, index, expected):
         assert self.table[index].eval(self.state, self.model) == expected
 
-    union_cases = [
+    union_cases: ClassVar = [
         ((value, value, value, value), {0, 1, 2})
         for value in [set_const, set_expr, set_var]
     ]
@@ -646,7 +666,7 @@ class TestSetTable:
     def test_union(self, index, expected):
         assert self.table.union(index).eval(self.state, self.model) == expected
 
-    intersection_cases = [
+    intersection_cases: ClassVar = [
         ((value, value, value, value), set())
         for value in [set_const, set_expr, set_var]
     ]
@@ -659,7 +679,7 @@ class TestSetTable:
     def test_intersection(self, index, expected):
         assert self.table.intersection(index).eval(self.state, self.model) == expected
 
-    symmetric_difference_cases = [
+    symmetric_difference_cases: ClassVar = [
         ((value, value, value, value), {0, 2})
         for value in [set_const, set_expr, set_var]
     ]
@@ -675,7 +695,7 @@ class TestSetTable:
             == expected
         )
 
-    error_cases = [
+    error_cases: ClassVar = [
         (-1, 0, 0),
         (0, -1, 0),
         (0, 0, -1),
@@ -686,7 +706,7 @@ class TestSetTable:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(TypeError):
             self.table[index].eval(self.state, self.model)
 
 
@@ -709,7 +729,7 @@ class TestBoolTable1D:
     table = model.add_bool_table([True, False])
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (zero_expr, True),
         (zero_var, True),
         (zero_resource_var, True),
@@ -724,11 +744,14 @@ class TestBoolTable1D:
     def test(self, x, expected):
         assert self.table[x].eval(self.state, self.model) == expected
 
-    error_cases = [-1, dp.IntExpr(0), 2]
+    error_cases: ClassVar = [-1, dp.IntExpr(0), 2]
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -764,7 +787,7 @@ class TestBoolTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, -1),
         (-1, 0),
@@ -776,7 +799,10 @@ class TestBoolTable2D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -858,7 +884,7 @@ class TestBoolTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, 1),
         (-1, 0, 0),
@@ -874,7 +900,10 @@ class TestBoolTable3D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -915,7 +944,7 @@ class TestBoolTable:
     def test(self, index, expected):
         assert self.table[index].eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         (-1, 0, 0),
         (0, -1, 0),
         (0, 0, -1),
@@ -926,7 +955,7 @@ class TestBoolTable:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(TypeError):
             self.table[index].eval(self.state, self.model)
 
 
@@ -953,7 +982,7 @@ class TestIntTable1D:
     table = model.add_int_table([3, 2])
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (zero_expr, 3),
         (zero_var, 3),
         (zero_resource_var, 3),
@@ -971,29 +1000,32 @@ class TestIntTable1D:
     def test(self, x, expected):
         assert self.table[x].eval(self.state, self.model) == expected
 
-    product_cases = [(set_const, 6), (set_expr, 6), (set_var, 6)]
+    product_cases: ClassVar = [(set_const, 6), (set_expr, 6), (set_var, 6)]
 
     @pytest.mark.parametrize("x, expected", product_cases)
     def test_product(self, x, expected):
         assert self.table.product(x).eval(self.state, self.model) == expected
 
-    max_cases = [(set_const, 3), (set_expr, 3), (set_var, 3)]
+    max_cases: ClassVar = [(set_const, 3), (set_expr, 3), (set_var, 3)]
 
     @pytest.mark.parametrize("x, expected", max_cases)
     def test_max(self, x, expected):
         assert self.table.max(x).eval(self.state, self.model) == expected
 
-    min_cases = [(set_const, 2), (set_expr, 2), (set_var, 2)]
+    min_cases: ClassVar = [(set_const, 2), (set_expr, 2), (set_var, 2)]
 
     @pytest.mark.parametrize("x, expected", min_cases)
     def test_min(self, x, expected):
         assert self.table.min(x).eval(self.state, self.model) == expected
 
-    error_cases = [-1, dp.IntExpr(0), 2]
+    error_cases: ClassVar = [-1, dp.IntExpr(0), 2]
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1042,7 +1074,7 @@ class TestIntTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    product_cases = []
+    product_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1057,7 +1089,7 @@ class TestIntTable2D:
     def test_product(self, x, y, expected):
         assert self.table.product(x, y).eval(self.state, self.model) == expected
 
-    max_cases = []
+    max_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1072,7 +1104,9 @@ class TestIntTable2D:
     def test_max(self, x, y, expected):
         assert self.table.max(x, y).eval(self.state, self.model) == expected
 
-    min_cases = [(value, value, 2) for value in [set_const, set_expr, set_var]]
+    min_cases: ClassVar = [
+        (value, value, 2) for value in [set_const, set_expr, set_var]
+    ]
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1087,7 +1121,7 @@ class TestIntTable2D:
     def test_min(self, x, y, expected):
         assert self.table.min(x, y).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, -1),
         (-1, 0),
@@ -1099,7 +1133,10 @@ class TestIntTable2D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1199,7 +1236,7 @@ class TestIntTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    product_cases = []
+    product_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1219,7 +1256,7 @@ class TestIntTable3D:
     def test_product(self, x, y, z, expected):
         assert self.table.product(x, y, z).eval(self.state, self.model) == expected
 
-    max_cases = []
+    max_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1239,7 +1276,7 @@ class TestIntTable3D:
     def test_max(self, x, y, z, expected):
         assert self.table.max(x, y, z).eval(self.state, self.model) == expected
 
-    min_cases = []
+    min_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1259,7 +1296,7 @@ class TestIntTable3D:
     def test_min(self, x, y, z, expected):
         assert self.table.min(x, y, z).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, 1),
         (-1, 0, 0),
@@ -1275,7 +1312,10 @@ class TestIntTable3D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1326,7 +1366,7 @@ class TestIntTable:
     def test(self, index, expected):
         assert self.table[index].eval(self.state, self.model) == expected
 
-    product_cases = [
+    product_cases: ClassVar = [
         ((value, value, value, value), 1610612736)
         for value in [set_const, set_expr, set_var]
     ]
@@ -1339,7 +1379,7 @@ class TestIntTable:
     def test_product(self, index, expected):
         assert self.table.product(index).eval(self.state, self.model) == expected
 
-    max_cases = [
+    max_cases: ClassVar = [
         ((value, value, value, value), 4) for value in [set_const, set_expr, set_var]
     ]
 
@@ -1351,7 +1391,7 @@ class TestIntTable:
     def test_max(self, index, expected):
         assert self.table.max(index).eval(self.state, self.model) == expected
 
-    min_cases = [
+    min_cases: ClassVar = [
         ((value, value, value, value), 2) for value in [set_const, set_expr, set_var]
     ]
 
@@ -1363,7 +1403,7 @@ class TestIntTable:
     def test_min(self, index, expected):
         assert self.table.min(index).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         (-1, 0, 0),
         (0, -1, 0),
         (0, 0, -1),
@@ -1374,7 +1414,7 @@ class TestIntTable:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(TypeError):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1401,7 +1441,7 @@ class TestFloatTable1D:
     table = model.add_float_table([0.3, 0.2])
     state = model.target_state
 
-    cases = [
+    cases: ClassVar = [
         (zero_expr, pytest.approx(0.3)),
         (zero_var, pytest.approx(0.3)),
         (zero_resource_var, pytest.approx(0.3)),
@@ -1419,7 +1459,7 @@ class TestFloatTable1D:
     def test(self, x, expected):
         assert self.table[x].eval(self.state, self.model) == expected
 
-    product_cases = [
+    product_cases: ClassVar = [
         (set_const, pytest.approx(0.06)),
         (set_expr, pytest.approx(0.06)),
         (set_var, pytest.approx(0.06)),
@@ -1429,7 +1469,7 @@ class TestFloatTable1D:
     def test_product(self, x, expected):
         assert self.table.product(x).eval(self.state, self.model) == expected
 
-    max_cases = [
+    max_cases: ClassVar = [
         (set_const, pytest.approx(0.3)),
         (set_expr, pytest.approx(0.3)),
         (set_var, pytest.approx(0.3)),
@@ -1439,7 +1479,7 @@ class TestFloatTable1D:
     def test_max(self, x, expected):
         assert self.table.max(x).eval(self.state, self.model) == expected
 
-    min_cases = [
+    min_cases: ClassVar = [
         (set_const, pytest.approx(0.2)),
         (set_expr, pytest.approx(0.2)),
         (set_var, pytest.approx(0.2)),
@@ -1449,11 +1489,14 @@ class TestFloatTable1D:
     def test_min(self, x, expected):
         assert self.table.min(x).eval(self.state, self.model) == expected
 
-    error_cases = [-1, dp.FloatExpr(0), 2]
+    error_cases: ClassVar = [-1, dp.FloatExpr(0), 2]
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1506,7 +1549,7 @@ class TestFloatTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    product_cases = []
+    product_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1521,7 +1564,7 @@ class TestFloatTable2D:
     def test_product(self, x, y, expected):
         assert self.table.product(x, y).eval(self.state, self.model) == expected
 
-    max_cases = []
+    max_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1536,7 +1579,7 @@ class TestFloatTable2D:
     def test_max(self, x, y, expected):
         assert self.table.max(x, y).eval(self.state, self.model) == expected
 
-    min_cases = []
+    min_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1551,7 +1594,7 @@ class TestFloatTable2D:
     def test_min(self, x, y, expected):
         assert self.table.min(x, y).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, -1),
         (-1, 0),
@@ -1563,7 +1606,10 @@ class TestFloatTable2D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1672,7 +1718,7 @@ class TestFloatTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    product_cases = []
+    product_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1692,7 +1738,7 @@ class TestFloatTable3D:
     def test_product(self, x, y, z, expected):
         assert self.table.product(x, y, z).eval(self.state, self.model) == expected
 
-    max_cases = []
+    max_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1712,7 +1758,7 @@ class TestFloatTable3D:
     def test_max(self, x, y, z, expected):
         assert self.table.max(x, y, z).eval(self.state, self.model) == expected
 
-    min_cases = []
+    min_cases: ClassVar = []
 
     for x in [set_const, set_expr, set_var]:
         for y in [set_const, set_expr, set_var]:
@@ -1732,7 +1778,7 @@ class TestFloatTable3D:
     def test_min(self, x, y, z, expected):
         assert self.table.min(x, y, z).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         0,
         (0, 1),
         (-1, 0, 0),
@@ -1748,7 +1794,10 @@ class TestFloatTable3D:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(
+            BaseException,
+            match="index out of bounds|failed to extract|not an instance of|expected tuple",
+        ):
             self.table[index].eval(self.state, self.model)
 
 
@@ -1799,7 +1848,7 @@ class TestFloatTable:
     def test(self, index, expected):
         assert self.table[index].eval(self.state, self.model) == expected
 
-    product_cases = [
+    product_cases: ClassVar = [
         ((value, value, value, value), pytest.approx(1.61061273e-07))
         for value in [set_const, set_expr, set_var]
     ]
@@ -1812,7 +1861,7 @@ class TestFloatTable:
     def test_product(self, index, expected):
         assert self.table.product(index).eval(self.state, self.model) == expected
 
-    max_cases = [
+    max_cases: ClassVar = [
         ((value, value, value, value), pytest.approx(0.4))
         for value in [set_const, set_expr, set_var]
     ]
@@ -1825,7 +1874,7 @@ class TestFloatTable:
     def test_max(self, index, expected):
         assert self.table.max(index).eval(self.state, self.model) == expected
 
-    min_cases = [
+    min_cases: ClassVar = [
         ((value, value, value, value), pytest.approx(0.2))
         for value in [set_const, set_expr, set_var]
     ]
@@ -1838,7 +1887,7 @@ class TestFloatTable:
     def test_min(self, index, expected):
         assert self.table.min(index).eval(self.state, self.model) == expected
 
-    error_cases = [
+    error_cases: ClassVar = [
         (-1, 0, 0),
         (0, -1, 0),
         (0, 0, -1),
@@ -1849,5 +1898,5 @@ class TestFloatTable:
 
     @pytest.mark.parametrize("index", error_cases)
     def test_error(self, index):
-        with pytest.raises(BaseException):
+        with pytest.raises(TypeError):
             self.table[index].eval(self.state, self.model)

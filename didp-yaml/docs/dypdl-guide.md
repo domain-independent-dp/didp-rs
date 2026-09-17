@@ -4,7 +4,11 @@ In DIDP-YAML, we use YAML to formulate a DyPDL model.
 We call our language YAML-DyPDL.
 This document describes how to write YAML-DyPDL to model a problem.
 
-To solve a problem using the DyPDL solver, you need to create three files, `domain.yaml`, `problem.yaml`, and `config.yaml`.
+Both validation and solving use two model files: `domain.yaml` defines the model,
+and `problem.yaml` supplies the instance data and target state.
+To validate a candidate, provide a `solution.yaml` file as described in the
+[validator guide](./validator-guide.md); no solver configuration is needed.
+To find a solution using a DyPDL solver, provide a `config.yaml` file instead.
 
 ## Table of Contents
 
@@ -29,7 +33,8 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [dictionary_values](#dictionary_values)
   - [target](#target)
 
-For a config file, see [the solver guide](./solver-guide.md).
+For a solver configuration file, see [the solver guide](./solver-guide.md).
+Validator-only users can skip that guide.
 
 ## YAML Basics
 
@@ -127,9 +132,9 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 `element` is an element variable, whose value is an object having the specified type.
 `integer` and `continuous` are integer and continuous variables.
 
-If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
-The value for `preference`  is either of `less` or `more`.
-Intuitively, with `less`/`more`, if everything else is the same, a state having a smaller/greater value of that variable is better.
+If `type` is `set`, `element`, `integer`, or `continuous`, the key `preference` can be used.
+The value for `preference`  is either of `less` or `greater`.
+Intuitively, with `less`/`greater`, if everything else is the same, a state having a smaller/greater value of that variable is better.
 Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
 
 #### Example
@@ -234,6 +239,8 @@ The type of the expression must match `type`.
 `object` is required, and the value is the name of an object type.
 With `parameters`, for each object or an element in the set variable, one state function is defined.
 The value of the key `name` can be used in the expression defining the state function.
+In expressions, an instantiated parameterized state function is referenced as `(<state function name> <element constant 1> ... <element constant n>)`.
+If the expression itself has parameters, those parameter names can be used as arguments.
 
 ### constraints
 
@@ -301,7 +308,7 @@ base_cases:
 ### reduce
 
 `reduce` is required, and the value is either of `min` or `max`.
-The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applicable transitions.
+The name `reduce` comes from the fact that we perform a reduce operation to aggregate the results of cost expressions of applicable transitions.
 `min`/`max` means that the problem is minimization/maximization.
 
 #### Example

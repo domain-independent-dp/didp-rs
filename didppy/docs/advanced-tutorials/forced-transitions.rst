@@ -27,7 +27,7 @@ Therefore, if we shoot a scene :math:`s \in Q` next, the set of actors on locati
 We need to pay the cost :math:`d_s \sum_{a \in L(s, Q)} c_a` when shooting scene :math:`s`.
 Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \setminus \{ s \}`.
 Therefore, a state is defined by the set of remaining scenes :math:`Q`, and the minimum cost to shoot :math:`Q` is represented by :math:`V(Q)`.
-Because :math:`A_s`, actors who play in scence :math:`s`, are always on location when :math:`s` is shot, :math:`\sum_{s \in Q} d_s \sum_{a \in A_s} c_a` is a lower bound on :math:`V(Q)`.
+Because :math:`A_s`, actors who play in scene :math:`s`, are always on location when :math:`s` is shot, :math:`\sum_{s \in Q} d_s \sum_{a \in A_s} c_a` is a lower bound on :math:`V(Q)`.
 We have the following DP formulation.
 
 .. math::
@@ -42,7 +42,7 @@ We have the following DP formulation.
 Scheduling without Extra Cost
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If :math:`A_s`, the set of actors that play in scence :math:`s`, is equivalent to the set of actors currently on location, we can shoot :math:`s` with the minimum cost:
+If :math:`A_s`, the set of actors that play in scene :math:`s`, is equivalent to the set of actors currently on location, we can shoot :math:`s` with the minimum cost:
 we just need to pay for the actors who play in :math:`s`.
 We should always shoot such a scene first.
 In state :math:`Q`, the set of actors on location is
@@ -105,7 +105,7 @@ Before defining forced transitions, let's model the other parts of the formulati
         on_location_s = scene_to_actors_table[s] | on_location
 
         shoot = dp.Transition(
-            name="shoot {}".format(s),
+            name=f"shoot {s}",
             cost=d[s] * actor_to_cost[on_location_s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[remaining.contains(s)],
@@ -150,7 +150,7 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
 
     for s in range(n):
         shoot = dp.Transition(
-            name="forced shoot {}".format(s),
+            name=f"forced shoot {s}",
             cost=scene_to_min_cost[s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[

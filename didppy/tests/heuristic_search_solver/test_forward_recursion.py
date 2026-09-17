@@ -1,7 +1,6 @@
 import didppy as dp
 import pytest
 
-
 error_cases = [
     ({"primal_bound": 1.5}, TypeError),
     ({"initial_registry_capacity": -1}, OverflowError),
@@ -55,5 +54,5 @@ def test_search_panic():
     model.add_dual_bound(0)
     solver = dp.ForwardRecursion(model)
 
-    with pytest.raises(BaseException):
+    with pytest.raises(BaseException, match="index out of bounds"):
         solver.search()
