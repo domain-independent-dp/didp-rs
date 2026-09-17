@@ -1,5 +1,6 @@
 [package]
 name = "didp-yaml"
+default-run = "didp-yaml"
 version = "0.10.1"
 edition = "2021"
 rust-version = "1.85"

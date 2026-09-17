@@ -13,10 +13,13 @@ pub enum WrappedCost {
 }
 
 /// Solution returned by a heuristic search solver.
+///
+/// Pass :attr:`transitions` to :meth:`Model.validate_solution` to check feasibility
+/// and compute the cost. Use :meth:`Model.validate_cost` separately to compare costs.
 #[pyclass(name = "Solution", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SolutionPy {
-    /// int, float, or None : Solution cost. None if a solution is not found.
+    /// int, float, or None : Solution cost. None if no solution was found.
     #[pyo3(get)]
     pub cost: Option<WrappedCost>,
     /// int, float, or None : Best dual bound. None if the solver does not compute a dual bound.
@@ -115,6 +118,7 @@ impl From<Solution<OrderedContinuous>> for SolutionPy {
         }
     }
 }
+
 pub enum WrappedSolver<T, U> {
     Int(T),
     Float(U),

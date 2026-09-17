@@ -115,6 +115,7 @@ Solution
    :toctree: _autosummary
 
    didppy.Solution
+   didppy.ValidationError
 
 Solver Configurations
 ---------------------

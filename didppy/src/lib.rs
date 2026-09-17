@@ -8,6 +8,10 @@ pub use model::ModelPy;
 /// DIDPPy -- DyPDL interface for Python
 #[pymodule]
 fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
+    m.add(
+        "ValidationError",
+        m.py().get_type::<model::ValidationError>(),
+    )?;
     m.add_class::<model::ObjectTypePy>()?;
     m.add_class::<model::LocalVarPy>()?;
     m.add_class::<model::ModelPy>()?;

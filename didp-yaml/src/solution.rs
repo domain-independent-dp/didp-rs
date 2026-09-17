@@ -1,8 +1,17 @@
+//! Loading, validating, and dumping solutions in the solver's YAML format.
+
+mod loader;
+mod validation;
+
+pub use loader::{load_solution_from_file, load_solution_from_str, load_solution_from_yaml};
+pub use validation::{validate_cost, validate_solution, CostTolerance, SolutionError};
+
 use dypdl::variable_type::{Continuous, Element, Integer, Numeric, OrderedContinuous};
 use dypdl::Transition;
 use dypdl_heuristic_search::Solution;
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::fmt;
 use std::fs;
 use yaml_rust::{yaml::Hash, Yaml, YamlEmitter};
 
@@ -31,7 +40,10 @@ impl TransitionToDump {
         let mut parameters = Hash::new();
 
         for (name, value) in &self.parameters {
-            parameters.insert(Yaml::from_str(name), Yaml::Integer(i64::try_from(*value)?));
+            parameters.insert(
+                Yaml::String(name.clone()),
+                Yaml::Integer(i64::try_from(*value)?),
+            );
         }
 
         let mut yaml = Hash::new();
@@ -42,12 +54,36 @@ impl TransitionToDump {
 }
 
 /// Cost of a solution that is serializable.
-#[derive(Debug, PartialEq)]
-pub enum CostToDump {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum SolutionCost {
     /// Integer value.
     Integer(Integer),
     /// Continuous value.
     Continuous(Continuous),
+}
+
+/// Backward-compatible name for a serializable solution cost.
+pub use SolutionCost as CostToDump;
+
+impl fmt::Display for SolutionCost {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Integer(value) => write!(f, "{value}"),
+            Self::Continuous(value) => write!(f, "{value}"),
+        }
+    }
+}
+
+/// A candidate solution resolved against an existing model.
+///
+/// Loading does not establish feasibility. `cost` is the optional declared cost;
+/// [`validate_solution`] independently computes the cost and checks it if present.
+#[derive(Debug, PartialEq, Clone)]
+pub struct LoadedSolution {
+    /// Declared objective value, or `None` when omitted or null in the YAML.
+    pub cost: Option<SolutionCost>,
+    /// Forward transitions from the model, in solution order.
+    pub transitions: Vec<Transition>,
 }
 
 impl From<&CostToDump> for Yaml {
@@ -112,11 +148,29 @@ impl SolutionToDump {
 
     /// Output the solution to a file.
     pub fn dump_to_file(&self, filename: &str) -> Result<(), Box<dyn Error>> {
+        fs::write(filename, self.dump_to_str()?)?;
+        Ok(())
+    }
+
+    /// Returns a YAML document representing the solution.
+    pub fn dump_to_str(&self) -> Result<String, Box<dyn Error>> {
         let mut solution = String::new();
         let mut emitter = YamlEmitter::new(&mut solution);
         emitter.dump(&self.to_yaml()?)?;
-        fs::write(filename, solution)?;
-        Ok(())
+        Ok(solution)
+    }
+}
+
+impl From<LoadedSolution> for SolutionToDump {
+    fn from(solution: LoadedSolution) -> Self {
+        Self {
+            cost: solution.cost,
+            transitions: solution
+                .transitions
+                .into_iter()
+                .map(TransitionToDump::from)
+                .collect(),
+        }
     }
 }
 

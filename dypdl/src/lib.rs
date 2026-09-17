@@ -132,6 +132,7 @@ pub mod expression;
 mod grounded_condition;
 mod local_variable;
 mod parent_and_child_state_function_cache;
+mod solution_validation;
 mod state;
 mod state_functions;
 mod table;
@@ -146,6 +147,7 @@ pub use effect::Effect;
 pub use grounded_condition::GroundedCondition;
 pub use local_variable::{LocalVariable, LocalVariableData};
 pub use parent_and_child_state_function_cache::ParentAndChildStateFunctionCache;
+pub use solution_validation::SolutionValidationError;
 pub use state::{
     AccessPreference, CheckVariable, ContinuousResourceVariable, ContinuousVariable,
     ElementResourceVariable, ElementVariable, GetObjectTypeOf, IntegerResourceVariable,
@@ -579,6 +581,10 @@ impl Model {
 
     /// Validate a solution consists of forward transitions.
     ///
+    /// Legacy interface: prefer [`Model::validate_solution`] to compute the cost
+    /// and receive structured errors. This method accepts unregistered transitions,
+    /// omits target-state constraint checks, and only warns about cost mismatches.
+    ///
     /// # Panics
     ///
     /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set in a precondition or an effect of a transition.
@@ -605,69 +611,17 @@ impl Model {
         cost: T,
         show_message: bool,
     ) -> bool {
-        let mut state_vec = vec![self.target.clone()];
-        let mut function_cache = StateFunctionCache::new(&self.state_functions);
-
-        for (i, transition) in transitions.iter().enumerate() {
-            let state = state_vec.last().unwrap();
-            if self.is_base(state, &mut function_cache) {
+        // Preserve the legacy acceptance of unregistered transitions, omission of
+        // target constraints, and warning-only treatment of a cost mismatch.
+        let validation_cost = match self.validate_solution_inner(transitions.iter(), false) {
+            Ok(cost) => cost,
+            Err(error) => {
                 if show_message {
-                    println!("The {} th state satisfies a base case while there are {} transitions left.", i, transitions.len() - i);
+                    println!("{error}");
                 }
                 return false;
             }
-            if !transition.is_applicable(
-                state,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            ) {
-                if show_message {
-                    println!(
-                        "The {} th transition {} is not applicable.",
-                        i,
-                        transition.get_full_name()
-                    );
-                }
-                return false;
-            }
-            let next_state = state.apply_effect(
-                &transition.effect,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            );
-            function_cache.clear();
-
-            if !self.check_constraints(&next_state, &mut function_cache) {
-                if show_message {
-                    println!("The {} th state does not satisfy state constraints", i + 1);
-                }
-                return false;
-            }
-            state_vec.push(next_state);
-        }
-        let mut validation_cost = if let Some(cost) =
-            self.eval_base_cost(state_vec.last().unwrap(), &mut function_cache)
-        {
-            cost
-        } else {
-            if show_message {
-                println!("The last state is not a base state.")
-            }
-            return false;
         };
-        state_vec.pop();
-        for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
-            function_cache.clear();
-            validation_cost = transition.eval_cost(
-                validation_cost,
-                &state,
-                &mut function_cache,
-                &self.state_functions,
-                &self.table_registry,
-            );
-        }
         if cost != validation_cost && show_message {
             println!("The cost {cost} does not match the actual cost {validation_cost}. This is possibly due to the cost being continuous.");
         }
@@ -2362,6 +2316,14 @@ impl Model {
         &self,
         transition: &Transition,
     ) -> Result<Transition, ModelErr> {
+        self.check_and_simplify_transition_inner(transition, true)
+    }
+
+    fn check_and_simplify_transition_inner(
+        &self,
+        transition: &Transition,
+        show_warnings: bool,
+    ) -> Result<Transition, ModelErr> {
         let cost = match &transition.cost {
             CostExpression::Integer(expression) => {
                 self.check_expression(expression, &mut FxHashSet::default(), true)?;
@@ -2447,11 +2409,12 @@ impl Model {
             let elements_in_set_resource_variable =
                 condition.elements_in_set_resource_variable.clone();
             match simplified {
-                expression::Condition::Constant(true) => {
+                expression::Condition::Constant(true) if show_warnings => {
                     eprintln!("precondition {condition:?} is always satisfied");
                 }
                 expression::Condition::Constant(false)
-                    if elements_in_set_variable.is_empty()
+                    if show_warnings
+                        && elements_in_set_variable.is_empty()
                         && elements_in_set_resource_variable.is_empty() =>
                 {
                     eprintln!("precondition {condition:?} is never satisfied");

@@ -4,7 +4,11 @@ In DIDP-YAML, we use YAML to formulate a DyPDL model.
 We call our language YAML-DyPDL.
 This document describes how to write YAML-DyPDL to model a problem.
 
-To solve a problem using the DyPDL solver, you need to create three files, `domain.yaml`, `problem.yaml`, and `config.yaml`.
+Both validation and solving use two model files: `domain.yaml` defines the model,
+and `problem.yaml` supplies the instance data and target state.
+To validate a candidate, provide a `solution.yaml` file as described in the
+[validator guide](./validator-guide.md); no solver configuration is needed.
+To find a solution using a DyPDL solver, provide a `config.yaml` file instead.
 
 ## Table of Contents
 
@@ -29,7 +33,8 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [dictionary_values](#dictionary_values)
   - [target](#target)
 
-For a config file, see [the solver guide](./solver-guide.md).
+For a solver configuration file, see [the solver guide](./solver-guide.md).
+Validator-only users can skip that guide.
 
 ## YAML Basics
 

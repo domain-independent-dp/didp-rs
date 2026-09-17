@@ -1,5 +1,6 @@
 //! A module for modeling.
 mod expression;
+mod solution;
 mod state;
 mod table;
 mod transition;
@@ -11,6 +12,7 @@ pub use expression::*;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use rustc_hash::FxHashMap;
+pub use solution::ValidationError;
 pub use state::StatePy;
 use std::collections::HashSet;
 use std::fs;
@@ -434,6 +436,167 @@ impl ModelPy {
         let problem_str = fs::read_to_string(problem_path)?;
 
         Self::load_from_str(&domain_str, &problem_str)
+    }
+
+    /// Loads a candidate solution from YAML text using this model.
+    ///
+    /// The document must contain a ``transitions`` list with transition ``name``
+    /// and optional ``parameters`` mappings. These must uniquely identify this
+    /// model's transitions. The optional ``cost`` is retained as a declared cost;
+    /// loading does not establish feasibility.
+    ///
+    /// Parameters
+    /// ----------
+    /// solution_str: str
+    ///     Exactly one YAML document in the didp-yaml solution format.
+    ///
+    /// Returns
+    /// -------
+    /// tuple[list[Transition], int | float | None]
+    ///     A pair (transitions, declared_cost). The first item is always a list;
+    ///     the second is None if cost is omitted or null in the YAML. Otherwise,
+    ///     the declared cost is an int for an integer-cost model and a float for
+    ///     a continuous-cost model. Loading does not compute or compare costs.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the YAML, declared cost, or transition references are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> model.load_solution_from_str("transitions: []")
+    /// ([], None)
+    /// >>> model.load_solution_from_str("{cost: 0, transitions: []}")
+    /// ([], 0)
+    fn load_solution_from_str(
+        &self,
+        solution_str: &str,
+    ) -> PyResult<(Vec<TransitionPy>, Option<IntOrFloat>)> {
+        solution::load_from_str(self, solution_str)
+    }
+
+    /// Loads a candidate solution from a YAML file using this model.
+    ///
+    /// See :meth:`load_solution_from_str` for the format and loading behavior.
+    /// Pass the returned transitions to :meth:`validate_solution` to check
+    /// feasibility and compute the cost. Compare the declared cost separately
+    /// using :meth:`validate_cost` if it is not None.
+    ///
+    /// Parameters
+    /// ----------
+    /// solution_path: str or os.PathLike
+    ///     Solution file path.
+    ///
+    /// Returns
+    /// -------
+    /// tuple[list[Transition], int | float | None]
+    ///     A pair (transitions, declared_cost), as in :meth:`load_solution_from_str`.
+    ///
+    /// Raises
+    /// ------
+    /// OSError
+    ///     If the file cannot be read.
+    /// ValueError
+    ///     If the YAML, declared cost, or transition references are invalid.
+    fn load_solution_from_file(
+        &self,
+        solution_path: std::path::PathBuf,
+    ) -> PyResult<(Vec<TransitionPy>, Option<IntOrFloat>)> {
+        self.load_solution_from_str(&fs::read_to_string(solution_path)?)
+    }
+
+    /// Returns a YAML string representing a candidate solution.
+    ///
+    /// Serializes transition names and parameter maps, not their definitions.
+    /// For transition objects, membership is not checked; reloading requires
+    /// their references to uniquely identify transitions in the supplied model.
+    /// IDs are resolved against this model, just as in :meth:`get_transition`.
+    /// No feasibility checks, expression evaluation, or cost comparison is done.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or IDs in solution order. All entries must have the same
+    ///     type. For a solver result, pass :code:`solution.transitions`.
+    /// cost: int or float or None, default: None
+    ///     Declared cost to serialize, without computing or checking its value.
+    ///     Must match the model's cost type and be finite. None writes YAML null;
+    ///     no objective is computed when the cost is omitted.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     YAML in the format accepted by :meth:`load_solution_from_str` and
+    ///     didp-yaml-validator, with a required transitions list and optional cost.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If transitions is not a homogeneous sequence of transitions or IDs,
+    ///     or cost has the wrong type for the model.
+    /// ValueError
+    ///     If an ID is backward or out of range, cost is non-finite, or the
+    ///     candidate cannot be serialized.
+    /// OverflowError
+    ///     If an integer cost is outside the 32-bit integer range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> step = dp.Transition(name="step")
+    /// >>> step_id = model.add_transition(step)
+    /// >>> text = model.dump_solution_to_str([step_id], cost=2)
+    /// >>> transitions, cost = model.load_solution_from_str(text)
+    /// >>> [t.name for t in transitions], cost
+    /// (['step'], 2)
+    /// >>> text = model.dump_solution_to_str([step])
+    /// >>> transitions, cost = model.load_solution_from_str(text)
+    /// >>> cost is None
+    /// True
+    #[pyo3(signature = (transitions, cost = None))]
+    fn dump_solution_to_str(
+        &self,
+        transitions: solution::SolutionTransitions,
+        cost: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        solution::dump_to_str(self, transitions, cost)
+    }
+
+    /// Writes a candidate solution to a YAML file, overwriting it if it exists.
+    ///
+    /// See :meth:`dump_solution_to_str` for the format and serialization behavior.
+    /// Input is serialized before the file is opened. No feasibility checks or
+    /// cost computation or comparison is done.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or IDs in solution order, all of the same type.
+    /// solution_path: str or os.PathLike
+    ///     Output file path. Its parent directory must already exist.
+    /// cost: int or float or None, default: None
+    ///     Declared cost to serialize. None writes YAML null.
+    ///
+    /// Raises
+    /// ------
+    /// OSError
+    ///     If the file cannot be written.
+    /// TypeError, ValueError, OverflowError
+    ///     If an input cannot be serialized; see :meth:`dump_solution_to_str`.
+    #[pyo3(signature = (transitions, solution_path, cost = None))]
+    fn dump_solution_to_file(
+        &self,
+        transitions: solution::SolutionTransitions,
+        solution_path: std::path::PathBuf,
+        cost: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let yaml = self.dump_solution_to_str(transitions, cost)?;
+        fs::write(solution_path, yaml)?;
+        Ok(())
     }
 
     /// Gets the object type by a name.
@@ -2626,6 +2789,10 @@ impl ModelPy {
 
     /// Validates a solution consists of forward transitions.
     ///
+    /// Legacy interface. Prefer :meth:`validate_solution` for computed costs and
+    /// exception-based diagnostics. This method accepts unregistered transitions,
+    /// does not check target-state constraints, and only warns about cost mismatches.
+    ///
     /// Parameters
     /// ----------
     /// transitions: list of Transition
@@ -2681,6 +2848,124 @@ impl ModelPy {
             let cost: Integer = cost.extract()?;
             Ok(self.0.validate_forward(&transitions, cost, !quiet))
         }
+    }
+
+    /// Validates a solution and returns its computed objective value.
+    ///
+    /// Checks that the transitions belong to this model, are applicable, satisfy
+    /// state constraints (including at the target), and end at the first base
+    /// state. Original transition objects are accepted after model simplification.
+    /// All transition memberships or IDs are checked in sequence order before
+    /// checking feasibility. An invalid reference is reported even if an earlier
+    /// transition would fail a feasibility check.
+    /// Costs are evaluated backwards from the base cost using the model's cost
+    /// expressions. Forced-transition priority, dominance, bounds, and optimality
+    /// are not checked.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: Sequence[Transition] or Sequence[TransitionId]
+    ///     Transitions or their IDs in forward order. All entries must be of the
+    ///     same type. IDs resolve directly to registered transitions in this model.
+    ///     IDs do not track model ownership: an ID from another model is interpreted
+    ///     using its index and flags in this model. For a :class:`Solution`,
+    ///     pass :code:`solution.transitions`. No declared cost is compared; use
+    ///     :meth:`validate_cost` separately if needed.
+    ///
+    /// Returns
+    /// -------
+    /// int or float
+    ///     Independently computed objective value, according to model.float_cost.
+    ///
+    /// Raises
+    /// ------
+    /// ValidationError
+    ///     If a transition is unregistered, an ID is out of range,
+    ///     the solution is infeasible, expression
+    ///     evaluation fails, or a cost is non-finite.
+    ///     Evaluation panics become ValidationError, but Rust's panic hook may
+    ///     still write a diagnostic to stderr.
+    /// TypeError
+    ///     If the argument is not a homogeneous sequence of transitions or IDs.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> step = dp.Transition(name="step", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+    /// >>> step_id = model.add_transition(step)
+    /// >>> model.validate_solution([step])
+    /// 1
+    /// >>> model.validate_solution([step_id])
+    /// 1
+    /// >>> transitions, declared_cost = model.load_solution_from_str("{cost: 1, transitions: [{name: step}]}")
+    /// >>> cost = model.validate_solution(transitions)
+    /// >>> cost
+    /// 1
+    /// >>> model.validate_cost(cost, declared_cost)
+    fn validate_solution(
+        &self,
+        transitions: solution::SolutionTransitions,
+    ) -> PyResult<IntOrFloat> {
+        solution::validate(self, transitions)
+    }
+
+    /// Compares a computed objective value with a declared cost.
+    ///
+    /// This method only compares numbers; it does not validate feasibility or
+    /// evaluate transitions. Use :meth:`validate_solution` to compute the cost.
+    /// Integer costs are always compared exactly. Continuous costs must be finite
+    /// and their absolute difference must be at most
+    /// max(abs_tol, rel_tol * max(abs(declared_cost), abs(computed_cost))).
+    ///
+    /// Parameters
+    /// ----------
+    /// computed_cost: int or float
+    ///     Independently computed objective value.
+    /// declared_cost: int or float
+    ///     Cost to check against the computed value. If loading returned
+    ///     :code:`declared_cost=None`, skip this call.
+    /// rel_tol: float, default: 0.0
+    ///     Non-negative finite relative tolerance for continuous cost comparison.
+    /// abs_tol: float, default: 0.0
+    ///     Non-negative finite absolute tolerance for continuous cost comparison.
+    ///
+    /// Returns
+    /// -------
+    /// None
+    ///     If the costs match.
+    ///
+    /// Raises
+    /// ------
+    /// ValidationError
+    ///     If the costs do not match or either cost is non-finite.
+    /// ValueError
+    ///     If a tolerance is negative or non-finite.
+    /// TypeError
+    ///     If either cost has the wrong type for the model.
+    /// OverflowError
+    ///     If an integer cost is outside the 32-bit integer range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model(float_cost=True)
+    /// >>> model.validate_cost(0.1 + 0.2, 0.3, rel_tol=1e-9)
+    /// >>> model.validate_cost(2.0, 3.0)
+    /// Traceback (most recent call last):
+    ///     ...
+    /// didppy.ValidationError: The declared cost 3 does not match the computed cost 2.
+    #[pyo3(signature = (computed_cost, declared_cost, *, rel_tol = 0.0, abs_tol = 0.0))]
+    fn validate_cost(
+        &self,
+        computed_cost: Bound<'_, PyAny>,
+        declared_cost: Bound<'_, PyAny>,
+        rel_tol: f64,
+        abs_tol: f64,
+    ) -> PyResult<()> {
+        solution::validate_cost(self, computed_cost, declared_cost, rel_tol, abs_tol)
     }
 
     /// Adds a table of element constants.

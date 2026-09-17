@@ -3,6 +3,7 @@
 pub mod dypdl_parser;
 pub mod dypdl_yaml_dumper;
 pub mod heuristic_search_solver;
+pub mod solution;
 pub mod util;
 
 pub use dypdl_yaml_dumper::{dump_model, model_to_yaml};
