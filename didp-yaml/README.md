@@ -2,7 +2,7 @@
 
 [![Actions Status](https://img.shields.io/github/actions/workflow/status/domain-independent-dp/didp-rs/didp-yaml.yaml?branch=main&logo=github&style=flat-square)](https://github.com/domain-independent-dp/didp-rs/actions)
 [![crates.io](https://img.shields.io/crates/v/didp-yaml)](https://crates.io/crates/didp-yaml)
-[![minimum rustc 1.85](https://img.shields.io/badge/rustc-1.85+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
+[![minimum rustc 1.90](https://img.shields.io/badge/rustc-1.90+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -16,7 +16,7 @@ by hand; it must be expressed as a sequence of transitions in your DyPDL model.
 
 ## Install the Validator
 
-Install [Rust](https://www.rust-lang.org/tools/install) 1.85 or later, then install
+Install [Rust](https://www.rust-lang.org/tools/install) 1.90 or later, then install
 the published package from crates.io:
 
 ```bash

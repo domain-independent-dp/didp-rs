@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
+requires = ["maturin>=1.15,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -9,8 +9,8 @@ authors = [
     { name = "Yuxiao (Jasper) Chen", email = "yuxiao.chen@mail.utoronto.ca" },
     { name = "Anubhav Singh", email = "anubhav.singh@utoronto.ca" },
 ]
-version = "0.10.1"
-requires-python = ">=3.7"
+version = "0.11.0"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -29,7 +29,7 @@ line_length = 88
 max-line-length = 88
 
 [tool.ruff]
-target-version = "py37"
+target-version = "py38"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib", "--color=yes"]
