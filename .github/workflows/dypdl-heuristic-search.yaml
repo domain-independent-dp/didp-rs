@@ -10,6 +10,7 @@ on:
       - main
       - develop
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "dypdl/**"
       - "dypdl-heuristic-search/**"
@@ -24,6 +25,7 @@ defaults:
 
 jobs:
   test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
